@@ -3,14 +3,14 @@ import SwiftUI
 
 /// Manages the borderless panel that sits over the notch area at the top of the screen.
 final class NotchWindowController {
-    /// Slightly taller than the menu bar (32pt on notch MacBooks) so the rounded
-    /// capsule visibly hangs below the menu bar even on the black notch.
-    private let compactSize = NSSize(width: 220, height: 44)
-    private let expandedSize = NSSize(width: 220, height: 170)
+    /// Slightly wider than the physical notch so the side teasers (weather/battery)
+    /// read at a glance; taller than the menu bar so the capsule hangs below it.
+    private let compactSize = NSSize(width: 250, height: 44)
+    private let expandedSize = NSSize(width: 380, height: 470)
     private let panel: NSPanel
     private var isVisible = false
 
-    init() {
+    init(services: (weather: WeatherService, calendar: CalendarService, battery: BatteryService)) {
         panel = NSPanel(contentRect: NSRect(origin: .zero, size: compactSize),
                         styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered,
@@ -25,7 +25,10 @@ final class NotchWindowController {
 
         let hostingView = NSHostingView(rootView: NotchView(onHoverChange: { [weak self] hovering in
             self?.setExpanded(hovering)
-        }))
+        })
+        .environmentObject(services.weather)
+        .environmentObject(services.calendar)
+        .environmentObject(services.battery))
         // Keep the window in charge of sizing; otherwise SwiftUI's ideal size
         // fights the notch pill frames.
         hostingView.sizingOptions = []
@@ -67,7 +70,7 @@ final class NotchWindowController {
     private func setExpanded(_ expanded: Bool) {
         let target = expanded ? expandedSize : compactSize
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.28
+            context.duration = 0.32
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().setFrame(frame(for: target), display: true)
         }

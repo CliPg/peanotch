@@ -3,11 +3,18 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notchController: NotchWindowController?
     private var statusItem: NSStatusItem?
+    private let weather = WeatherService()
+    private let calendarService = CalendarService()
+    private let battery = BatteryService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diagnostics.record("applicationDidFinishLaunching")
 
-        let controller = NotchWindowController()
+        weather.start()
+        calendarService.requestAndLoad()
+        battery.start()
+
+        let controller = NotchWindowController(services: (weather, calendarService, battery))
         controller.show()
         notchController = controller
 
