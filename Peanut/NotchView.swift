@@ -6,6 +6,8 @@ import SwiftUI
 /// sized by `layout` and springs between compact (notch + wings) and expanded
 /// (dashboard) — Sapphire uses .spring(response: 0.4, dampingFraction: 0.55).
 struct NotchView: View {
+    var onBandTap: () -> Void = {}
+
     @EnvironmentObject var layout: NotchLayoutState
     @EnvironmentObject var weather: WeatherService
     @EnvironmentObject var calendarService: CalendarService
@@ -38,7 +40,15 @@ struct NotchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            notchBand
+            // Always-tappable strip across the notch band; the wing content
+            // (which fades out when expanded) sits on top of it.
+            ZStack(alignment: .top) {
+                Color.clear.frame(height: layout.compactHeight)
+                notchBand
+            }
+            .frame(height: layout.compactHeight)
+            .contentShape(Rectangle())
+            .onTapGesture { onBandTap() }
             if layout.expanded {
                 expandedCards
                     .padding(.horizontal, 14)

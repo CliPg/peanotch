@@ -28,7 +28,6 @@ final class NotchWindowController {
     private var isExpanded = false
     private var isVisible = true
     private var eventMonitors: [Any] = []
-    private var collapseCheck: Timer?
     private var screenObserver: NSObjectProtocol?
 
     init(services: (weather: WeatherService, calendar: CalendarService, battery: BatteryService)) {
@@ -45,7 +44,9 @@ final class NotchWindowController {
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = true
 
-        let hostingView = NSHostingView(rootView: NotchView()
+        let hostingView = NSHostingView(rootView: NotchView(onBandTap: { [weak self] in
+            self?.toggleExpansion()
+        })
             .environmentObject(layout)
             .environmentObject(services.weather)
             .environmentObject(services.calendar)
@@ -135,32 +136,35 @@ final class NotchWindowController {
                              height: canvasHeight)
     }
 
-    // MARK: - Hover tracking (Sapphire-style: state-based regions)
+    // MARK: - Pointer tracking + click handling
 
+    /// Mouse moves only toggle whether the canvas accepts events over the live
+    /// surface; expansion is click-driven, not hover-driven.
     private func installHoverMonitors() {
-        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
-        eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
-            self?.evaluateHover()
+        let moves: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: moves) { [weak self] _ in
+            self?.updateMouseEventHandling()
         } as Any)
-        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
-            self?.evaluateHover()
+        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: moves) { [weak self] event in
+            self?.updateMouseEventHandling()
+            return event
+        } as Any)
+
+        let downs: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: downs) { [weak self] _ in
+            self?.handleMouseDown()
+        } as Any)
+        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: downs) { [weak self] event in
+            self?.handleMouseDown()
             return event
         } as Any)
     }
 
-    private func evaluateHover() {
-        let location = NSEvent.mouseLocation
-        if isExpanded {
-            if expandedFrame.insetBy(dx: -6, dy: -6).contains(location) {
-                collapseCheck?.invalidate()
-                collapseCheck = nil
-            } else {
-                scheduleCollapse()
-            }
-        } else if compactFrame.insetBy(dx: -4, dy: -8).contains(location) {
-            expand()
-        }
-        updateMouseEventHandling()
+    /// A click outside the expanded dashboard closes it (Sapphire's click mode).
+    private func handleMouseDown() {
+        guard isExpanded,
+              !expandedFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) else { return }
+        collapse()
     }
 
     /// The big canvas intercepts clicks only over the live surface.
@@ -169,14 +173,11 @@ final class NotchWindowController {
         panel.ignoresMouseEvents = !surface.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
     }
 
-    private func scheduleCollapse() {
-        guard collapseCheck == nil else { return }
-        collapseCheck = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.collapseCheck = nil
-            if !self.expandedFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) {
-                self.collapse()
-            }
+    private func toggleExpansion() {
+        if isExpanded {
+            collapse()
+        } else {
+            expand()
         }
     }
 
