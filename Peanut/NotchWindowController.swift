@@ -1,17 +1,30 @@
 import AppKit
 import SwiftUI
 
+/// Shared with the SwiftUI layer: drives which layout (compact band vs expanded
+/// dashboard) the notch surface renders.
+final class NotchLayoutState: ObservableObject {
+    @Published var expanded = false
+}
+
 /// Manages the borderless panel that sits over the notch area at the top of the screen.
+///
+/// The compact window is sized to the physical notch (via the screen's auxiliary
+/// top areas) so it blends into the hardware. On hover — tracked with global mouse
+/// monitors against a state-based region, never against the animating window
+/// frame — the panel expands horizontally into a dashboard below the notch band.
 final class NotchWindowController {
-    /// Slightly wider than the physical notch so the side teasers (weather/battery)
-    /// read at a glance; taller than the menu bar so the capsule hangs below it.
-    private let compactSize = NSSize(width: 250, height: 44)
-    private let expandedSize = NSSize(width: 380, height: 470)
+    private let layout = NotchLayoutState()
+    private var compactFrame: NSRect = .zero
+    private var expandedFrame: NSRect = .zero
     private let panel: NSPanel
     private var isVisible = false
+    private var eventMonitors: [Any] = []
+    private var collapseCheck: Timer?
+    private var screenObserver: NSObjectProtocol?
 
     init(services: (weather: WeatherService, calendar: CalendarService, battery: BatteryService)) {
-        panel = NSPanel(contentRect: NSRect(origin: .zero, size: compactSize),
+        panel = NSPanel(contentRect: .zero,
                         styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered,
                         defer: false)
@@ -23,29 +36,40 @@ final class NotchWindowController {
         panel.isMovable = false
         panel.hidesOnDeactivate = false
 
-        let hostingView = NSHostingView(rootView: NotchView(onHoverChange: { [weak self] hovering in
-            self?.setExpanded(hovering)
-        })
-        .environmentObject(services.weather)
-        .environmentObject(services.calendar)
-        .environmentObject(services.battery))
+        let hostingView = NSHostingView(rootView: NotchView()
+            .environmentObject(layout)
+            .environmentObject(services.weather)
+            .environmentObject(services.calendar)
+            .environmentObject(services.battery))
         // Keep the window in charge of sizing; otherwise SwiftUI's ideal size
-        // fights the notch pill frames.
+        // fights the notch frames.
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
 
-        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
-                                               object: nil,
-                                               queue: .main) { [weak self] _ in
-            self?.reposition()
+        computeFrames()
+        panel.setFrame(compactFrame, display: true)
+
+        installHoverMonitors()
+
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.computeFrames()
+            self.panel.setFrame(self.layout.expanded ? self.expandedFrame : self.compactFrame, display: true)
         }
-        reposition()
-        Diagnostics.record("panel created, frame=\(panel.frame), screen=\(panel.screen?.localizedName ?? "nil"), level=\(panel.level.rawValue)")
+
+        Diagnostics.record("panel created, compact=\(compactFrame), expanded=\(expandedFrame), screen=\(panel.screen?.localizedName ?? "nil")")
+    }
+
+    deinit {
+        eventMonitors.forEach { NSEvent.removeMonitor($0) }
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
     }
 
     func show() {
-        reposition()
+        panel.setFrame(layout.expanded ? expandedFrame : compactFrame, display: true)
         panel.orderFrontRegardless()
         isVisible = true
         Diagnostics.record("show: ordered front, frame=\(panel.frame)")
@@ -62,29 +86,93 @@ final class NotchWindowController {
 
     /// Dumps the real window state so launch problems are diagnosable from Console.
     func logState() {
-        let screenName = panel.screen?.localizedName ?? "nil"
-        let screenFrame = panel.screen?.frame ?? .zero
-        Diagnostics.record("state: frame=\(panel.frame) visible=\(isVisible) onActiveSpace=\(panel.isOnActiveSpace) occlusion=\(panel.occlusionState) screen=\(screenName) screenFrame=\(screenFrame)")
+        Diagnostics.record("state: frame=\(panel.frame) visible=\(isVisible) onActiveSpace=\(panel.isOnActiveSpace) occlusion=\(panel.occlusionState)")
     }
 
-    private func setExpanded(_ expanded: Bool) {
-        let target = expanded ? expandedSize : compactSize
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.32
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().setFrame(frame(for: target), display: true)
+    // MARK: - Notch geometry
+
+    /// Compact frame = the physical notch rectangle (gap between the screen's
+    /// auxiliary top areas), slightly inset to stay inside its rounded corners.
+    private func computeFrames() {
+        guard let screen = panel.screen ?? NSScreen.main else { return }
+        let notchWidth: CGFloat
+        let bandHeight: CGFloat
+        if let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+            notchWidth = right.minX - left.maxX
+            bandHeight = left.height
+        } else {
+            // No notch (external display): a small invisible-ish pill at top-center.
+            notchWidth = 200
+            bandHeight = 32
+        }
+
+        let compactWidth = max(120, notchWidth - 16)
+        compactFrame = NSRect(x: screen.frame.midX - compactWidth / 2,
+                              y: screen.frame.maxY - bandHeight,
+                              width: compactWidth,
+                              height: bandHeight)
+
+        let expandedWidth = min(620, screen.frame.width - 100)
+        let expandedHeight: CGFloat = 208
+        expandedFrame = NSRect(x: screen.frame.midX - expandedWidth / 2,
+                               y: screen.frame.maxY - expandedHeight,
+                               width: expandedWidth,
+                               height: expandedHeight)
+    }
+
+    // MARK: - Hover tracking (state-based region, never the animating frame)
+
+    private func installHoverMonitors() {
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
+            self?.evaluateHover()
+        } as Any)
+        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
+            self?.evaluateHover()
+            return event
+        } as Any)
+    }
+
+    private func evaluateHover() {
+        let location = NSEvent.mouseLocation
+        if layout.expanded {
+            if expandedFrame.insetBy(dx: -6, dy: -6).contains(location) {
+                collapseCheck?.invalidate()
+                collapseCheck = nil
+            } else {
+                scheduleCollapse()
+            }
+        } else if compactFrame.insetBy(dx: -4, dy: -8).contains(location) {
+            expand()
         }
     }
 
-    private func reposition() {
-        panel.setFrame(frame(for: compactSize), display: true)
+    private func scheduleCollapse() {
+        guard collapseCheck == nil else { return }
+        collapseCheck = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.collapseCheck = nil
+            if !self.expandedFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) {
+                self.collapse()
+            }
+        }
     }
 
-    private func frame(for size: NSSize) -> NSRect {
-        guard let screen = panel.screen ?? NSScreen.main else { return .zero }
-        return NSRect(x: screen.frame.midX - size.width / 2,
-                      y: screen.frame.maxY - size.height,
-                      width: size.width,
-                      height: size.height)
+    private func expand() {
+        layout.expanded = true
+        animate(to: expandedFrame)
+    }
+
+    private func collapse() {
+        layout.expanded = false
+        animate(to: compactFrame)
+    }
+
+    private func animate(to frame: NSRect) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().setFrame(frame, display: true)
+        }
     }
 }
