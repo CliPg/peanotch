@@ -187,11 +187,13 @@ struct NotchView: View {
                         .font(.system(size: 17, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.6))
                 }
-                Spacer(minLength: 8)
+                .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 12)
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(weather.snapshot?.conditionText ?? weather.state.stateText)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.8))
+                        .fixedSize(horizontal: true, vertical: false)
                     if let snapshot = weather.snapshot {
                         HStack(spacing: 8) {
                             Text("H \(snapshot.high)°").foregroundStyle(Color.white.opacity(0.55))
@@ -199,6 +201,7 @@ struct NotchView: View {
                         }
                         .font(.system(size: 11, design: .rounded))
                         .monospacedDigit()
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                 }
             }

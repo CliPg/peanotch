@@ -116,7 +116,7 @@ final class NotchWindowController {
                               width: compactWidth,
                               height: bandHeight)
 
-        let expandedWidth = min(620, screen.frame.width - 100)
+        let expandedWidth = min(780, screen.frame.width - 80)
         let expandedHeight: CGFloat = 208
         expandedFrame = NSRect(x: screen.frame.midX - expandedWidth / 2,
                                y: screen.frame.maxY - expandedHeight,
