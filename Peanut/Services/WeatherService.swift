@@ -22,10 +22,6 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
 
     private let manager = CLLocationManager()
 
-    private static let latitudeKey = "peanut.cachedLatitude"
-    private static let longitudeKey = "peanut.cachedLongitude"
-    private static let placeKey = "peanut.cachedPlace"
-
     override init() {
         super.init()
         manager.delegate = self
@@ -34,15 +30,6 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
 
     func start() {
         guard snapshot == nil else { return }
-        // Prefer the cached location: CoreLocation is only needed once ever, so
-        // the permission prompt never comes back after the first successful fix
-        // (important for ad-hoc builds whose identity changes on every rebuild).
-        if let cached = Self.cachedCoordinate() {
-            state = .loading
-            place = UserDefaults.standard.string(forKey: Self.placeKey) ?? "上次位置"
-            fetchWeather(for: cached)
-            return
-        }
         state = .locating
         switch manager.authorizationStatus {
         case .notDetermined:
@@ -57,20 +44,6 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     func retry() {
         snapshot = nil
         start()
-    }
-
-    private static func cachedCoordinate() -> CLLocation? {
-        let defaults = UserDefaults.standard
-        guard defaults.object(forKey: latitudeKey) != nil,
-              defaults.object(forKey: longitudeKey) != nil else { return nil }
-        return CLLocation(latitude: defaults.double(forKey: latitudeKey),
-                          longitude: defaults.double(forKey: longitudeKey))
-    }
-
-    private static func cache(_ location: CLLocation) {
-        let defaults = UserDefaults.standard
-        defaults.set(location.coordinate.latitude, forKey: latitudeKey)
-        defaults.set(location.coordinate.longitude, forKey: longitudeKey)
     }
 
     // MARK: - CLLocationManagerDelegate
@@ -93,15 +66,12 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
-        Self.cache(location)
         state = .loading
         fetchWeather(for: location)
         CLGeocoder().reverseGeocodeLocation(location) { [weak self] placemarks, _ in
             let name = placemarks?.first.map { [$0.locality, $0.administrativeArea].compactMap { $0 }.joined(separator: " · ") }
             DispatchQueue.main.async {
-                let resolved = (name?.isEmpty == false ? name : nil) ?? "当前位置"
-                self?.place = resolved
-                UserDefaults.standard.set(resolved, forKey: Self.placeKey)
+                self?.place = (name?.isEmpty == false ? name : nil) ?? "当前位置"
             }
         }
     }
