@@ -1,55 +1,58 @@
 import AppKit
 import SwiftUI
 
-/// Shared with the SwiftUI layer: drives which layout (compact band vs expanded
-/// dashboard) the notch surface renders, plus the compact side-wing width.
+/// Shared with the SwiftUI layer.
 final class NotchLayoutState: ObservableObject {
-    @Published var expanded = false
-    @Published var sideInset: CGFloat = 38
+    @Published var sideInset: CGFloat = 56
+    /// Toggled by the controller when the dashboard window shows/hides; drives
+    /// the SwiftUI grow/crossfade animation inside the dashboard.
+    @Published var dashboardVisible = false
 }
 
-/// Manages the borderless panel that sits over the notch area at the top of the screen.
+/// Two fixed-size panels — the window frames NEVER resize, which is what caused
+/// flicker with animated setFrame on a transparent borderless panel:
 ///
-/// The compact window is sized to the physical notch (via the screen's auxiliary
-/// top areas) so it blends into the hardware. On hover — tracked with global mouse
-/// monitors against a state-based region, never against the animating window
-/// frame — the panel expands horizontally into a dashboard below the notch band.
+/// - bandPanel (notch + wings): always visible, hosts the compact teasers.
+/// - dashboardPanel (full dashboard size): ordered out while idle; on hover it
+///   fades in while its SwiftUI surface grows from notch-size to full-size.
 final class NotchWindowController {
     private let layout = NotchLayoutState()
     private var compactFrame: NSRect = .zero
     private var expandedFrame: NSRect = .zero
-    private let panel: NSPanel
-    private var isVisible = false
+    private let bandPanel: NSPanel
+    private let dashboardPanel: NSPanel
+    private var isExpanded = false
+    private var isBandVisible = true
     private var eventMonitors: [Any] = []
     private var collapseCheck: Timer?
     private var screenObserver: NSObjectProtocol?
 
     init(services: (weather: WeatherService, calendar: CalendarService, battery: BatteryService)) {
-        panel = NSPanel(contentRect: .zero,
-                        styleMask: [.borderless, .nonactivatingPanel],
-                        backing: .buffered,
-                        defer: false)
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.isMovable = false
-        panel.hidesOnDeactivate = false
+        bandPanel = Self.makePanel()
+        dashboardPanel = Self.makePanel()
 
-        let hostingView = NSHostingView(rootView: NotchView()
+        let bandView = NSHostingView(rootView: NotchView()
             .environmentObject(layout)
             .environmentObject(services.weather)
             .environmentObject(services.calendar)
             .environmentObject(services.battery))
-        // Keep the window in charge of sizing; otherwise SwiftUI's ideal size
-        // fights the notch frames.
-        hostingView.sizingOptions = []
-        hostingView.autoresizingMask = [.width, .height]
-        panel.contentView = hostingView
+        let dashboardView = NSHostingView(rootView: DashboardView()
+            .environmentObject(layout)
+            .environmentObject(services.weather)
+            .environmentObject(services.calendar)
+            .environmentObject(services.battery))
+        // Keep the windows in charge of sizing; otherwise SwiftUI's ideal
+        // size fights the notch frames.
+        bandView.sizingOptions = []
+        bandView.autoresizingMask = [.width, .height]
+        dashboardView.sizingOptions = []
+        dashboardView.autoresizingMask = [.width, .height]
+        bandPanel.contentView = bandView
+        dashboardPanel.contentView = dashboardView
 
         computeFrames()
-        panel.setFrame(compactFrame, display: true)
+        bandPanel.setFrame(compactFrame, display: true)
+        dashboardPanel.setFrame(expandedFrame, display: false)
 
         installHoverMonitors()
 
@@ -58,10 +61,11 @@ final class NotchWindowController {
             object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.computeFrames()
-            self.panel.setFrame(self.layout.expanded ? self.expandedFrame : self.compactFrame, display: true)
+            self.bandPanel.setFrame(self.compactFrame, display: true)
+            self.dashboardPanel.setFrame(self.expandedFrame, display: true)
         }
 
-        Diagnostics.record("panel created, compact=\(compactFrame), expanded=\(expandedFrame), screen=\(panel.screen?.localizedName ?? "nil")")
+        Diagnostics.record("panels created, compact=\(compactFrame), expanded=\(expandedFrame), screen=\(bandPanel.screen?.localizedName ?? "nil")")
     }
 
     deinit {
@@ -69,25 +73,40 @@ final class NotchWindowController {
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
     }
 
+    private static func makePanel() -> NSPanel {
+        let panel = NSPanel(contentRect: .zero,
+                            styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered,
+                            defer: false)
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.isMovable = false
+        panel.hidesOnDeactivate = false
+        return panel
+    }
+
     func show() {
-        panel.setFrame(layout.expanded ? expandedFrame : compactFrame, display: true)
-        panel.orderFrontRegardless()
-        isVisible = true
-        Diagnostics.record("show: ordered front, frame=\(panel.frame)")
+        bandPanel.orderFrontRegardless()
+        isBandVisible = true
+        Diagnostics.record("show: band frame=\(bandPanel.frame)")
     }
 
     func toggle() {
-        if isVisible {
-            panel.orderOut(nil)
+        if isBandVisible {
+            collapse()
+            bandPanel.orderOut(nil)
         } else {
-            panel.orderFrontRegardless()
+            bandPanel.orderFrontRegardless()
         }
-        isVisible.toggle()
+        isBandVisible.toggle()
     }
 
     /// Dumps the real window state so launch problems are diagnosable from Console.
     func logState() {
-        Diagnostics.record("state: frame=\(panel.frame) visible=\(isVisible) onActiveSpace=\(panel.isOnActiveSpace) occlusion=\(panel.occlusionState)")
+        Diagnostics.record("state: band=\(bandPanel.frame) dashboard=\(dashboardPanel.frame) expanded=\(isExpanded)")
     }
 
     // MARK: - Notch geometry
@@ -96,7 +115,7 @@ final class NotchWindowController {
     /// (Sapphire-style): the notch itself stays pure black, and the glanceable
     /// values (temperature / battery) live in the wings, clear of the camera.
     private func computeFrames() {
-        guard let screen = panel.screen ?? NSScreen.main else { return }
+        guard let screen = bandPanel.screen ?? NSScreen.main else { return }
         layout.sideInset = 56
         let sideInset = layout.sideInset
 
@@ -106,11 +125,9 @@ final class NotchWindowController {
             compactWidth = (right.minX - left.maxX) + sideInset * 2
             bandHeight = left.height
         } else {
-            // No notch (external display): a modest pill at top-center.
             compactWidth = 210 + sideInset * 2
             bandHeight = 32
         }
-
         compactFrame = NSRect(x: screen.frame.midX - compactWidth / 2,
                               y: screen.frame.maxY - bandHeight,
                               width: compactWidth,
@@ -139,7 +156,7 @@ final class NotchWindowController {
 
     private func evaluateHover() {
         let location = NSEvent.mouseLocation
-        if layout.expanded {
+        if isExpanded {
             if expandedFrame.insetBy(dx: -6, dy: -6).contains(location) {
                 collapseCheck?.invalidate()
                 collapseCheck = nil
@@ -163,20 +180,30 @@ final class NotchWindowController {
     }
 
     private func expand() {
-        layout.expanded = true
-        animateFrame(to: expandedFrame)
+        guard !isExpanded else { return }
+        isExpanded = true
+        dashboardPanel.setFrame(expandedFrame, display: false)
+        dashboardPanel.alphaValue = 0
+        dashboardPanel.orderFrontRegardless()
+        layout.dashboardVisible = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            dashboardPanel.animator().alphaValue = 1
+        }
     }
 
     private func collapse() {
-        layout.expanded = false
-        animateFrame(to: compactFrame)
-    }
-
-    private func animateFrame(to frame: NSRect) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.3
+        guard isExpanded else { return }
+        isExpanded = false
+        layout.dashboardVisible = false
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.18
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().setFrame(frame, display: true)
-        }
+            dashboardPanel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, !self.isExpanded else { return }
+            self.dashboardPanel.orderOut(nil)
+        })
     }
 }
