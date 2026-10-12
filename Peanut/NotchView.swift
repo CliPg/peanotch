@@ -40,9 +40,11 @@ struct NotchView: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 10)
                     .padding(.bottom, 16)
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(.easeInOut(duration: 0.2), value: layout.expanded)
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 NotchPillShape(bottomRadius: layout.expanded ? 28 : 12).fill(Color.black)
