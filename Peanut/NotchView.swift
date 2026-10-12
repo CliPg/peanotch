@@ -1,9 +1,10 @@
+import AppKit
 import Combine
 import SwiftUI
 
-/// The notch UI. Compact = a thin band inside the physical notch (content kept
-/// to the sides, clear of the camera housing). Expanded = a horizontal dashboard
-/// rendered strictly below the notch band.
+/// The notch UI, drawn inside a fixed-size canvas window. The surface itself is
+/// sized by `layout` and springs between compact (notch + wings) and expanded
+/// (dashboard) — Sapphire uses .spring(response: 0.4, dampingFraction: 0.55).
 struct NotchView: View {
     @EnvironmentObject var layout: NotchLayoutState
     @EnvironmentObject var weather: WeatherService
@@ -12,6 +13,9 @@ struct NotchView: View {
 
     @State private var now = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    /// Sapphire's expansion curve: noticeable overshoot, quick settle.
+    private static let expansionAnimation = Animation.spring(response: 0.4, dampingFraction: 0.55, blendDuration: 0)
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -40,9 +44,12 @@ struct NotchView: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 10)
                     .padding(.bottom, 16)
+                    .transition(.opacity)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
+        .frame(width: layout.expanded ? layout.expandedWidth : layout.compactWidth,
+               height: layout.expanded ? layout.expandedHeight : layout.compactHeight)
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 NotchPillShape(bottomRadius: layout.expanded ? 28 : 12).fill(Color.black)
@@ -50,6 +57,8 @@ struct NotchView: View {
             }
             .ignoresSafeArea()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(Self.expansionAnimation, value: layout.expanded)
         .onReceive(timer) { now = $0 }
     }
 
@@ -66,7 +75,7 @@ struct NotchView: View {
                 .frame(width: layout.sideInset)
         }
         .padding(.horizontal, 2)
-        .frame(height: 32)
+        .frame(height: layout.compactHeight)
         .opacity(bandOpacity)
     }
 
@@ -105,8 +114,7 @@ struct NotchView: View {
         .padding(.leading, 10)
     }
 
-    /// The band is part of the expanded surface too, but its teasers look
-    /// noisy floating far apart on the wide dashboard — keep them only when compact.
+    /// Wings vanish (crossfade) once the dashboard takes over the surface.
     private var bandOpacity: Double { layout.expanded ? 0 : 1 }
 
     // MARK: - Expanded dashboard
@@ -319,6 +327,11 @@ extension WeatherService.LoadState {
 /// Sapphire-style notch silhouette: flat top edge, generously rounded bottom.
 struct NotchPillShape: Shape {
     var bottomRadius: CGFloat
+
+    var animatableData: CGFloat {
+        get { bottomRadius }
+        set { bottomRadius = newValue }
+    }
 
     func path(in rect: CGRect) -> Path {
         let radius = min(bottomRadius, rect.width / 2, rect.height)

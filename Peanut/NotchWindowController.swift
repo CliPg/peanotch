@@ -1,25 +1,32 @@
 import AppKit
 import SwiftUI
 
-/// Shared with the SwiftUI layer: drives which layout (compact band vs expanded
-/// dashboard) the notch surface renders, plus the compact side-wing width.
+/// Shared with the SwiftUI layer: the surface geometry + expansion state.
 final class NotchLayoutState: ObservableObject {
     @Published var expanded = false
-    @Published var sideInset: CGFloat = 38
+    @Published var sideInset: CGFloat = 56
+    @Published var compactWidth: CGFloat = 291
+    @Published var compactHeight: CGFloat = 32
+    @Published var expandedWidth: CGFloat = 780
+    @Published var expandedHeight: CGFloat = 208
 }
 
-/// Manages the borderless panel that sits over the notch area at the top of the screen.
+/// Sapphire-style notch controller.
 ///
-/// The compact window is sized to the physical notch (via the screen's auxiliary
-/// top areas) so it blends into the hardware. On hover — tracked with global mouse
-/// monitors against a state-based region, never against the animating window
-/// frame — the panel expands horizontally into a dashboard below the notch band.
+/// The window is a large FIXED-SIZE canvas (full screen width, ~42% of the
+/// screen height) that never resizes — resizing a transparent borderless panel
+/// is what caused ghosting/flicker. The notch surface animates from compact to
+/// expanded size entirely inside the canvas via a SwiftUI spring. The canvas is
+/// mouse-transparent (`ignoresMouseEvents`) except while the pointer is over
+/// the surface, so the menu bar stays clickable.
 final class NotchWindowController {
     private let layout = NotchLayoutState()
-    private var compactFrame: NSRect = .zero
-    private var expandedFrame: NSRect = .zero
+    private var canvasFrame: NSRect = .zero
+    private var compactFrame: NSRect = .zero   // surface rect on screen when compact
+    private var expandedFrame: NSRect = .zero  // surface rect on screen when expanded
     private let panel: NSPanel
-    private var isVisible = false
+    private var isExpanded = false
+    private var isVisible = true
     private var eventMonitors: [Any] = []
     private var collapseCheck: Timer?
     private var screenObserver: NSObjectProtocol?
@@ -36,20 +43,20 @@ final class NotchWindowController {
         panel.hasShadow = false
         panel.isMovable = false
         panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = true
 
         let hostingView = NSHostingView(rootView: NotchView()
             .environmentObject(layout)
             .environmentObject(services.weather)
             .environmentObject(services.calendar)
             .environmentObject(services.battery))
-        // Keep the window in charge of sizing; otherwise SwiftUI's ideal size
-        // fights the notch frames.
+        // The canvas window owns its size; SwiftUI animates within it.
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
 
         computeFrames()
-        panel.setFrame(compactFrame, display: true)
+        panel.setFrame(canvasFrame, display: true)
 
         installHoverMonitors()
 
@@ -58,10 +65,10 @@ final class NotchWindowController {
             object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.computeFrames()
-            self.panel.setFrame(self.layout.expanded ? self.expandedFrame : self.compactFrame, display: true)
+            self.panel.setFrame(self.canvasFrame, display: true)
         }
 
-        Diagnostics.record("panel created, compact=\(compactFrame), expanded=\(expandedFrame), screen=\(panel.screen?.localizedName ?? "nil")")
+        Diagnostics.record("canvas created, frame=\(canvasFrame), compact=\(compactFrame), expanded=\(expandedFrame), screen=\(panel.screen?.localizedName ?? "nil")")
     }
 
     deinit {
@@ -70,10 +77,9 @@ final class NotchWindowController {
     }
 
     func show() {
-        panel.setFrame(layout.expanded ? expandedFrame : compactFrame, display: true)
         panel.orderFrontRegardless()
         isVisible = true
-        Diagnostics.record("show: ordered front, frame=\(panel.frame)")
+        Diagnostics.record("show: canvas=\(panel.frame)")
     }
 
     func toggle() {
@@ -87,44 +93,49 @@ final class NotchWindowController {
 
     /// Dumps the real window state so launch problems are diagnosable from Console.
     func logState() {
-        Diagnostics.record("state: frame=\(panel.frame) visible=\(isVisible) onActiveSpace=\(panel.isOnActiveSpace) occlusion=\(panel.occlusionState)")
+        Diagnostics.record("state: canvas=\(panel.frame) expanded=\(isExpanded) ignoresMouseEvents=\(panel.ignoresMouseEvents)")
     }
 
-    // MARK: - Notch geometry
+    // MARK: - Geometry
 
-    /// Compact frame = the physical notch plus a narrow side wing on each edge
-    /// (Sapphire-style): the notch itself stays pure black, and the glanceable
-    /// values (temperature / battery) live in the wings, clear of the camera.
     private func computeFrames() {
         guard let screen = panel.screen ?? NSScreen.main else { return }
         layout.sideInset = 56
         let sideInset = layout.sideInset
 
-        let compactWidth: CGFloat
+        let notchWidth: CGFloat
         let bandHeight: CGFloat
         if let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
-            compactWidth = (right.minX - left.maxX) + sideInset * 2
+            notchWidth = right.minX - left.maxX
             bandHeight = left.height
         } else {
-            // No notch (external display): a modest pill at top-center.
-            compactWidth = 210 + sideInset * 2
+            notchWidth = 210
             bandHeight = 32
         }
 
-        compactFrame = NSRect(x: screen.frame.midX - compactWidth / 2,
-                              y: screen.frame.maxY - bandHeight,
-                              width: compactWidth,
-                              height: bandHeight)
+        layout.compactWidth = notchWidth + sideInset * 2
+        layout.compactHeight = bandHeight
+        layout.expandedWidth = min(780, screen.frame.width - 80)
+        layout.expandedHeight = 208
 
-        let expandedWidth = min(780, screen.frame.width - 80)
-        let expandedHeight: CGFloat = 208
-        expandedFrame = NSRect(x: screen.frame.midX - expandedWidth / 2,
-                               y: screen.frame.maxY - expandedHeight,
-                               width: expandedWidth,
-                               height: expandedHeight)
+        compactFrame = NSRect(x: screen.frame.midX - layout.compactWidth / 2,
+                              y: screen.frame.maxY - layout.compactHeight,
+                              width: layout.compactWidth,
+                              height: layout.compactHeight)
+        expandedFrame = NSRect(x: screen.frame.midX - layout.expandedWidth / 2,
+                               y: screen.frame.maxY - layout.expandedHeight,
+                               width: layout.expandedWidth,
+                               height: layout.expandedHeight)
+
+        // Fixed canvas: full screen width, tall enough for the expanded surface.
+        let canvasHeight = max(layout.expandedHeight + 24, screen.frame.height * 0.42)
+        canvasFrame = NSRect(x: screen.frame.minX,
+                             y: screen.frame.maxY - canvasHeight,
+                             width: screen.frame.width,
+                             height: canvasHeight)
     }
 
-    // MARK: - Hover tracking (state-based region, never the animating frame)
+    // MARK: - Hover tracking (Sapphire-style: state-based regions)
 
     private func installHoverMonitors() {
         let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
@@ -139,7 +150,7 @@ final class NotchWindowController {
 
     private func evaluateHover() {
         let location = NSEvent.mouseLocation
-        if layout.expanded {
+        if isExpanded {
             if expandedFrame.insetBy(dx: -6, dy: -6).contains(location) {
                 collapseCheck?.invalidate()
                 collapseCheck = nil
@@ -149,6 +160,13 @@ final class NotchWindowController {
         } else if compactFrame.insetBy(dx: -4, dy: -8).contains(location) {
             expand()
         }
+        updateMouseEventHandling()
+    }
+
+    /// The big canvas intercepts clicks only over the live surface.
+    private func updateMouseEventHandling() {
+        let surface = isExpanded ? expandedFrame : compactFrame
+        panel.ignoresMouseEvents = !surface.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
     }
 
     private func scheduleCollapse() {
@@ -163,12 +181,14 @@ final class NotchWindowController {
     }
 
     private func expand() {
+        guard !isExpanded else { return }
+        isExpanded = true
         layout.expanded = true
-        panel.setFrame(expandedFrame, display: true)
     }
 
     private func collapse() {
+        guard isExpanded else { return }
+        isExpanded = false
         layout.expanded = false
-        panel.setFrame(compactFrame, display: true)
     }
 }
