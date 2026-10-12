@@ -164,15 +164,11 @@ final class NotchWindowController {
 
     private func expand() {
         layout.expanded = true
-        setFrameImmediately(expandedFrame)
+        panel.setFrame(expandedFrame, display: true)
     }
 
     private func collapse() {
         layout.expanded = false
-        setFrameImmediately(compactFrame)
-    }
-
-    private func setFrameImmediately(_ frame: NSRect) {
-        panel.setFrame(frame, display: true)
+        panel.setFrame(compactFrame, display: true)
     }
 }
