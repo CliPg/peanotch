@@ -53,46 +53,56 @@ struct NotchView: View {
         .onReceive(timer) { now = $0 }
     }
 
-    // MARK: - Compact band (inside the notch)
+    // MARK: - Compact band (side wings beside the notch)
 
-    /// The camera housing sits at the center of the notch, so band content is
-    /// pinned to the left/right thirds and the middle stays empty.
+    /// The notch center is the camera housing; all band content lives in the
+    /// narrow wings flanking it — temperature on the left, battery on the right.
     private var notchBand: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 0) {
-                HStack(spacing: 3) {
-                    if let snapshot = weather.snapshot {
-                        Image(systemName: snapshot.conditionSymbol)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.85))
-                        Text("\(snapshot.temperature)°")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.white.opacity(0.9))
-                    } else {
-                        Image(systemName: weather.state == .denied ? "location.slash" : "location")
-                            .font(.system(size: 9))
-                            .foregroundStyle(Color.white.opacity(0.3))
-                    }
-                }
-                .frame(width: proxy.size.width * 0.30, alignment: .trailing)
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 4) {
-                    Text(Self.timeFormatter.string(from: now))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.white)
-                    Image(systemName: batterySymbol)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(battery.charging ? Color.green : Color.white.opacity(0.75))
-                }
-                .frame(width: proxy.size.width * 0.36, alignment: .leading)
-            }
+        HStack(spacing: 0) {
+            temperatureWing
+                .frame(width: layout.sideInset)
+            Spacer(minLength: 0)
+            batteryWing
+                .frame(width: layout.sideInset)
         }
+        .padding(.horizontal, 2)
         .frame(height: 32)
         .opacity(bandOpacity)
+    }
+
+    private var temperatureWing: some View {
+        HStack(spacing: 2) {
+            Spacer(minLength: 0)
+            if let snapshot = weather.snapshot {
+                Text("\(snapshot.temperature)°")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            } else {
+                Image(systemName: weather.state == .denied ? "location.slash" : "location")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.white.opacity(0.3))
+            }
+        }
+    }
+
+    private var batteryWing: some View {
+        HStack(spacing: 2) {
+            if battery.charging {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.green)
+            }
+            Text(battery.level.map { "\($0)%" } ?? "--%")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.92))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Spacer(minLength: 0)
+        }
     }
 
     /// The band is part of the expanded surface too, but its teasers look

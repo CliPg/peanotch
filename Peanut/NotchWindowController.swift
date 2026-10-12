@@ -2,9 +2,10 @@ import AppKit
 import SwiftUI
 
 /// Shared with the SwiftUI layer: drives which layout (compact band vs expanded
-/// dashboard) the notch surface renders.
+/// dashboard) the notch surface renders, plus the compact side-wing width.
 final class NotchLayoutState: ObservableObject {
     @Published var expanded = false
+    @Published var sideInset: CGFloat = 38
 }
 
 /// Manages the borderless panel that sits over the notch area at the top of the screen.
@@ -91,22 +92,25 @@ final class NotchWindowController {
 
     // MARK: - Notch geometry
 
-    /// Compact frame = the physical notch rectangle (gap between the screen's
-    /// auxiliary top areas), slightly inset to stay inside its rounded corners.
+    /// Compact frame = the physical notch plus a narrow side wing on each edge
+    /// (Sapphire-style): the notch itself stays pure black, and the glanceable
+    /// values (temperature / battery) live in the wings, clear of the camera.
     private func computeFrames() {
         guard let screen = panel.screen ?? NSScreen.main else { return }
-        let notchWidth: CGFloat
+        layout.sideInset = 38
+        let sideInset = layout.sideInset
+
+        let compactWidth: CGFloat
         let bandHeight: CGFloat
         if let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
-            notchWidth = right.minX - left.maxX
+            compactWidth = (right.minX - left.maxX) + sideInset * 2
             bandHeight = left.height
         } else {
-            // No notch (external display): a small invisible-ish pill at top-center.
-            notchWidth = 200
+            // No notch (external display): a modest pill at top-center.
+            compactWidth = 210 + sideInset * 2
             bandHeight = 32
         }
 
-        let compactWidth = max(120, notchWidth - 16)
         compactFrame = NSRect(x: screen.frame.midX - compactWidth / 2,
                               y: screen.frame.maxY - bandHeight,
                               width: compactWidth,
