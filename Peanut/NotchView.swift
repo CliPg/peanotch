@@ -85,6 +85,7 @@ struct NotchView: View {
                     .foregroundStyle(Color.white.opacity(0.3))
             }
         }
+        .padding(.trailing, 8)
     }
 
     private var batteryWing: some View {
@@ -101,6 +102,7 @@ struct NotchView: View {
                 .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 0)
         }
+        .padding(.leading, 10)
     }
 
     /// The band is part of the expanded surface too, but its teasers look
@@ -174,7 +176,7 @@ struct NotchView: View {
                     .foregroundStyle(Color.white.opacity(0.45))
                     .lineLimit(1)
             }
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: 16) {
                 Image(systemName: weather.snapshot?.conditionSymbol ?? "cloud.sun")
                     .font(.system(size: 30))
                     .foregroundStyle(Color.white)
@@ -188,7 +190,6 @@ struct NotchView: View {
                         .foregroundStyle(Color.white.opacity(0.6))
                 }
                 .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 12)
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(weather.snapshot?.conditionText ?? weather.state.stateText)
                         .font(.system(size: 12, weight: .medium))
@@ -204,6 +205,7 @@ struct NotchView: View {
                         .fixedSize(horizontal: true, vertical: false)
                     }
                 }
+                Spacer(minLength: 0)
             }
             if weather.state == .failed || weather.state == .denied {
                 HStack {
