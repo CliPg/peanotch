@@ -3,8 +3,10 @@ import SwiftUI
 
 /// Manages the borderless panel that sits over the notch area at the top of the screen.
 final class NotchWindowController {
-    private let compactSize = NSSize(width: 220, height: 36)
-    private let expandedSize = NSSize(width: 220, height: 150)
+    /// Slightly taller than the menu bar (32pt on notch MacBooks) so the rounded
+    /// capsule visibly hangs below the menu bar even on the black notch.
+    private let compactSize = NSSize(width: 220, height: 44)
+    private let expandedSize = NSSize(width: 220, height: 170)
     private let panel: NSPanel
     private var isVisible = false
 
@@ -24,6 +26,9 @@ final class NotchWindowController {
         let hostingView = NSHostingView(rootView: NotchView(onHoverChange: { [weak self] hovering in
             self?.setExpanded(hovering)
         }))
+        // Keep the window in charge of sizing; otherwise SwiftUI's ideal size
+        // fights the notch pill frames.
+        hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
 
@@ -33,11 +38,14 @@ final class NotchWindowController {
             self?.reposition()
         }
         reposition()
+        Diagnostics.record("panel created, frame=\(panel.frame), screen=\(panel.screen?.localizedName ?? "nil"), level=\(panel.level.rawValue)")
     }
 
     func show() {
+        reposition()
         panel.orderFrontRegardless()
         isVisible = true
+        Diagnostics.record("show: ordered front, frame=\(panel.frame)")
     }
 
     func toggle() {
@@ -47,6 +55,13 @@ final class NotchWindowController {
             panel.orderFrontRegardless()
         }
         isVisible.toggle()
+    }
+
+    /// Dumps the real window state so launch problems are diagnosable from Console.
+    func logState() {
+        let screenName = panel.screen?.localizedName ?? "nil"
+        let screenFrame = panel.screen?.frame ?? .zero
+        Diagnostics.record("state: frame=\(panel.frame) visible=\(isVisible) onActiveSpace=\(panel.isOnActiveSpace) occlusion=\(panel.occlusionState) screen=\(screenName) screenFrame=\(screenFrame)")
     }
 
     private func setExpanded(_ expanded: Bool) {
