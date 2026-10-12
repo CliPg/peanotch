@@ -40,6 +40,7 @@ struct NotchView: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 10)
                     .padding(.bottom, 16)
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -50,6 +51,7 @@ struct NotchView: View {
             }
             .ignoresSafeArea()
         }
+        .animation(.easeInOut(duration: 0.3), value: layout.expanded)
         .onReceive(timer) { now = $0 }
     }
 

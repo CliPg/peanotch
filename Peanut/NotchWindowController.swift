@@ -164,11 +164,19 @@ final class NotchWindowController {
 
     private func expand() {
         layout.expanded = true
-        panel.setFrame(expandedFrame, display: true)
+        animateFrame(to: expandedFrame)
     }
 
     private func collapse() {
         layout.expanded = false
-        panel.setFrame(compactFrame, display: true)
+        animateFrame(to: compactFrame)
+    }
+
+    private func animateFrame(to frame: NSRect) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().setFrame(frame, display: true)
+        }
     }
 }
