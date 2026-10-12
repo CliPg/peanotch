@@ -97,7 +97,7 @@ final class NotchWindowController {
     /// values (temperature / battery) live in the wings, clear of the camera.
     private func computeFrames() {
         guard let screen = panel.screen ?? NSScreen.main else { return }
-        layout.sideInset = 38
+        layout.sideInset = 56
         let sideInset = layout.sideInset
 
         let compactWidth: CGFloat

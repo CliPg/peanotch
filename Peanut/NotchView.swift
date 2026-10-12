@@ -78,8 +78,7 @@ struct NotchView: View {
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(Color.white.opacity(0.92))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .fixedSize(horizontal: true, vertical: false)
             } else {
                 Image(systemName: weather.state == .denied ? "location.slash" : "location")
                     .font(.system(size: 9))
@@ -99,8 +98,7 @@ struct NotchView: View {
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(Color.white.opacity(0.92))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 0)
         }
     }
