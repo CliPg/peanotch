@@ -8,7 +8,7 @@ final class NotchLayoutState: ObservableObject {
     @Published var compactWidth: CGFloat = 291
     @Published var compactHeight: CGFloat = 32
     @Published var expandedWidth: CGFloat = 900
-    @Published var expandedHeight: CGFloat = 258
+    @Published var expandedHeight: CGFloat = 273
 }
 
 /// Sapphire-style notch controller.
@@ -38,10 +38,10 @@ final class NotchWindowController {
     private var screenObserver: NSObjectProtocol?
 
     init(services: (weather: WeatherService, calendar: CalendarService, battery: BatteryService)) {
-        panel = NSPanel(contentRect: .zero,
-                        styleMask: [.borderless, .nonactivatingPanel],
-                        backing: .buffered,
-                        defer: false)
+        panel = KeyablePanel(contentRect: .zero,
+                             styleMask: [.borderless, .nonactivatingPanel],
+                             backing: .buffered,
+                             defer: false)
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         panel.isOpaque = false
@@ -141,7 +141,7 @@ final class NotchWindowController {
         layout.compactWidth = notchWidth + sideInset * 2
         layout.compactHeight = bandHeight
         layout.expandedWidth = min(900, screen.frame.width - 80)
-        layout.expandedHeight = 258
+        layout.expandedHeight = 273
 
         compactFrame = NSRect(x: screen.frame.midX - layout.compactWidth / 2,
                               y: screen.frame.maxY - layout.compactHeight,
@@ -336,4 +336,11 @@ final class NotchWindowController {
                                                  }))
         }
     }
+}
+
+/// Borderless non-activating panels refuse key status by default, which makes
+/// the inline "new reminder" TextField untypeable. Allow key (Spotlight-style:
+/// focus without activating the app).
+final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
 }

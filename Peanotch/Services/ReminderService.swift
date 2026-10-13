@@ -51,6 +51,21 @@ final class ReminderService: ObservableObject {
         }
     }
 
+    /// Creates a new day-level reminder (no specific time) and reloads.
+    func create(title: String, for date: Date) {
+        let reminder = EKReminder(eventStore: store)
+        reminder.title = title
+        reminder.calendar = store.defaultCalendarForNewReminders()
+            ?? store.calendars(for: .reminder).first
+        reminder.dueDateComponents = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        do {
+            try store.save(reminder, commit: true)
+            load(for: date)
+        } catch {
+            Diagnostics.record("reminder create failed: \(error.localizedDescription)")
+        }
+    }
+
     /// Marks the reminder complete and reloads the day.
     func toggleComplete(_ reminder: Reminder) {
         guard let ek = store.calendarItem(withIdentifier: reminder.id) as? EKReminder else { return }

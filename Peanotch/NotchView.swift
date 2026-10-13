@@ -19,6 +19,7 @@ struct NotchView: View {
     @EnvironmentObject var reminderService: ReminderService
 
     @State private var now = Date()
+    @State private var newReminderTitle = ""
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     /// Sapphire's expansion curve: noticeable overshoot, quick settle.
@@ -162,7 +163,7 @@ struct NotchView: View {
             countdownCard
                 .frame(width: 210)
         }
-        .frame(height: 200)
+        .frame(height: 215)
     }
 
     private var clockCard: some View {
@@ -313,10 +314,38 @@ struct NotchView: View {
                     .padding(.top, 2)
                 Spacer(minLength: 0)
             }
+            if reminderService.authorized == true {
+                newReminderRow
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    /// Inline composer: type a title, hit Return, creates a reminder for the
+    /// selected day.
+    private var newReminderRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.4))
+            TextField(L10n.t("新建待办…", "New to-do…"), text: $newReminderTitle)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white)
+                .onSubmit(createReminder)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    private func createReminder() {
+        let trimmed = newReminderTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        reminderService.create(title: trimmed, for: calendarService.selectedDate)
+        newReminderTitle = ""
     }
 
     // MARK: Unified day schedule (events + reminders, Sapphire-style)
@@ -351,7 +380,7 @@ struct NotchView: View {
             default: return false
             }
         }
-        return Array(items.prefix(5))
+        return Array(items.prefix(4))
     }
 
     private func scheduleRow(_ item: ScheduleItem) -> some View {
