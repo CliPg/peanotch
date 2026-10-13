@@ -211,15 +211,27 @@ final class NotchWindowController {
             // Utility window from a menu-bar app: float above normal windows
             // so it is never buried under whatever was frontmost.
             window.level = .floating
-            window.collectionBehavior = [.fullScreenAuxiliary]
+            window.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
             window.contentView = NSHostingView(rootView: CountdownEditorView(service: countdownService,
                                                                              onDone: { [weak window] in
                                                                                  window?.orderOut(nil)
                                                                              }))
             editorWindow = window
         }
-        editorWindow?.center()
-        editorWindow?.makeKeyAndOrderFront(nil)
+        guard let editorWindow else { return }
+        // Activate FIRST — an accessory app's windows are frequently ordered
+        // behind the frontmost app when shown before activation — then order
+        // the window front twice (key + regardless) as a belt-and-braces pair.
         NSApp.activate(ignoringOtherApps: true)
+        editorWindow.center()
+        editorWindow.makeKeyAndOrderFront(nil)
+        editorWindow.orderFrontRegardless()
+        // Re-assert ordering on the next runloop tick, once LaunchServices has
+        // actually processed the activation.
+        DispatchQueue.main.async { [weak editorWindow] in
+            NSApp.activate(ignoringOtherApps: true)
+            editorWindow?.makeKeyAndOrderFront(nil)
+        }
+        Diagnostics.record("countdown editor shown, level=\(editorWindow.level.rawValue)")
     }
 }
