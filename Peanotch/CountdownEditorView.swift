@@ -3,21 +3,23 @@ import SwiftUI
 /// Standalone editor window content for the countdown list: add, review, delete.
 struct CountdownEditorView: View {
     @ObservedObject var service: CountdownService
+    @ObservedObject private var settings = AppSettings.shared
     var onDone: () -> Void
 
     @State private var newTitle = ""
     @State private var newDate = Date()
 
-    private static let displayFormatter: DateFormatter = {
+    private var displayFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月d日"
+        let english = settings.resolvedLanguage == "en"
+        formatter.locale = Locale(identifier: english ? "en_US" : "zh_CN")
+        formatter.dateFormat = english ? "MMM d, yyyy" : "yyyy年M月d日"
         return formatter
-    }()
+    }
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("重要日子倒计时")
+            Text(L10n.t("重要日子倒计时", "Important Days"))
                 .font(.system(size: 14, weight: .semibold))
 
             Divider()
@@ -25,7 +27,7 @@ struct CountdownEditorView: View {
             ScrollView {
                 VStack(spacing: 8) {
                     if service.countdowns.isEmpty {
-                        Text("还没有添加重要日子")
+                        Text(L10n.t("还没有添加重要日子", "No important days yet"))
                             .font(.system(size: 12))
                             .foregroundStyle(Color.secondary)
                             .padding(.vertical, 16)
@@ -37,11 +39,11 @@ struct CountdownEditorView: View {
                                     Text("\(abs(service.daysRemaining(for: countdown)))")
                                         .font(.system(size: 16, weight: .bold, design: .rounded))
                                         .monospacedDigit()
-                                    Text("天")
+                                    Text(L10n.t("天", "d"))
                                         .font(.system(size: 9))
                                         .foregroundStyle(Color.secondary)
                                 }
-                                Text(service.daysRemaining(for: countdown) >= 0 ? "还剩" : "已过")
+                                Text(service.daysRemaining(for: countdown) >= 0 ? L10n.t("还剩", "left") : L10n.t("已过", "ago"))
                                     .font(.system(size: 9))
                                     .foregroundStyle(Color.secondary)
                             }
@@ -51,7 +53,7 @@ struct CountdownEditorView: View {
                                 .font(.system(size: 12))
                                 .lineLimit(1)
                             Spacer(minLength: 0)
-                            Text(Self.displayFormatter.string(from: countdown.date))
+                            Text(displayFormatter.string(from: countdown.date))
                                 .font(.system(size: 11))
                                 .foregroundStyle(Color.secondary)
                             Button {
@@ -73,11 +75,11 @@ struct CountdownEditorView: View {
             Divider()
 
             HStack(spacing: 8) {
-                TextField("名称（如：生日、考试）", text: $newTitle)
+                TextField(L10n.t("名称（如：生日、考试）", "Name (e.g. Birthday, Exam)"), text: $newTitle)
                     .textFieldStyle(.roundedBorder)
                 DatePicker("", selection: $newDate, displayedComponents: .date)
                     .labelsHidden()
-                Button("添加") {
+                Button(L10n.t("添加", "Add")) {
                     let trimmed = newTitle.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { return }
                     service.add(title: trimmed, date: newDate)
@@ -87,7 +89,7 @@ struct CountdownEditorView: View {
 
             HStack {
                 Spacer()
-                Button("完成", action: onDone)
+                Button(L10n.t("完成", "Done"), action: onDone)
                     .keyboardShortcut(.defaultAction)
             }
         }

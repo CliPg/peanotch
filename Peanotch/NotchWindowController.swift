@@ -27,6 +27,8 @@ final class NotchWindowController {
     private let panel: NSPanel
     private let countdownService = CountdownService()
     private var editorWindow: NSWindow?
+    private var settingsWindow: NSWindow?
+    private var collapseCheck: Timer?
     private var isExpanded = false
     private var isVisible = true
     private var eventMonitors: [Any] = []
@@ -50,12 +52,15 @@ final class NotchWindowController {
             self?.toggleExpansion()
         }, onEditCountdowns: { [weak self] in
             self?.showCountdownEditor()
+        }, onOpenSettings: { [weak self] in
+            self?.showSettingsWindow()
         })
             .environmentObject(layout)
             .environmentObject(services.weather)
             .environmentObject(services.calendar)
             .environmentObject(services.battery)
-            .environmentObject(countdownService))
+            .environmentObject(countdownService)
+            .environmentObject(AppSettings.shared))
         // The canvas window owns its size; SwiftUI animates within it.
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
@@ -186,6 +191,17 @@ final class NotchWindowController {
         }
     }
 
+    private func scheduleCollapse() {
+        guard collapseCheck == nil else { return }
+        collapseCheck = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.collapseCheck = nil
+            if !self.expandedFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) {
+                self.collapse()
+            }
+        }
+    }
+
     private func expand() {
         guard !isExpanded else { return }
         isExpanded = true
@@ -198,42 +214,53 @@ final class NotchWindowController {
         layout.expanded = false
     }
 
-    // MARK: - Countdown editor window
+    // MARK: - Utility windows (editor / settings)
 
-    private func showCountdownEditor() {
-        if editorWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
+    /// Presents a titled utility window above the notch canvas. The canvas is
+    /// at .statusBar (25) — a plain window would render underneath its black
+    /// surface — and an accessory app must activate before ordering front.
+    private func presentUtilityWindow(_ windowRef: inout NSWindow?,
+                                      title: String,
+                                      size: NSSize,
+                                      content: @escaping () -> NSView) {
+        if windowRef == nil {
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                                   styleMask: [.titled, .closable],
                                   backing: .buffered,
                                   defer: false)
-            window.title = "倒计时设置"
+            window.title = title
             window.isReleasedWhenClosed = false
-            // The notch canvas sits at .statusBar (25); a plain .floating (3)
-            // window renders UNDER it and gets covered by the black surface
-            // whenever it enters the canvas region (top 42% of the screen).
-            // Stay one level above the canvas.
             window.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
             window.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
-            window.contentView = NSHostingView(rootView: CountdownEditorView(service: countdownService,
-                                                                             onDone: { [weak window] in
-                                                                                 window?.orderOut(nil)
-                                                                             }))
-            editorWindow = window
+            window.contentView = content()
+            windowRef = window
         }
-        guard let editorWindow else { return }
-        // Activate FIRST — an accessory app's windows are frequently ordered
-        // behind the frontmost app when shown before activation — then order
-        // the window front twice (key + regardless) as a belt-and-braces pair.
+        guard let window = windowRef else { return }
         NSApp.activate(ignoringOtherApps: true)
-        editorWindow.center()
-        editorWindow.makeKeyAndOrderFront(nil)
-        editorWindow.orderFrontRegardless()
-        // Re-assert ordering on the next runloop tick, once LaunchServices has
-        // actually processed the activation.
-        DispatchQueue.main.async { [weak editorWindow] in
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        DispatchQueue.main.async { [weak window] in
             NSApp.activate(ignoringOtherApps: true)
-            editorWindow?.makeKeyAndOrderFront(nil)
+            window?.makeKeyAndOrderFront(nil)
         }
-        Diagnostics.record("countdown editor shown, level=\(editorWindow.level.rawValue)")
+    }
+
+    private func showCountdownEditor() {
+        presentUtilityWindow(&editorWindow, title: L10n.t("倒计时设置", "Countdowns"), size: NSSize(width: 420, height: 460)) { [weak self] in
+            NSHostingView(rootView: CountdownEditorView(service: self?.countdownService ?? CountdownService(),
+                                                        onDone: { [weak window = self?.editorWindow] in
+                                                            window?.orderOut(nil)
+                                                        }))
+        }
+    }
+
+    private func showSettingsWindow() {
+        presentUtilityWindow(&settingsWindow, title: L10n.t("设置", "Settings"), size: NSSize(width: 360, height: 340)) { [weak self] in
+            NSHostingView(rootView: SettingsView(settings: AppSettings.shared,
+                                                 onDone: { [weak window = self?.settingsWindow] in
+                                                     window?.orderOut(nil)
+                                                 }))
+        }
     }
 }

@@ -22,11 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.title = "🥜"
 
         let menu = NSMenu()
-        let toggleItem = NSMenuItem(title: "显示/隐藏刘海", action: #selector(toggleNotch(_:)), keyEquivalent: "n")
+        let toggleItem = NSMenuItem(title: L10n.t("显示/隐藏刘海", "Show/Hide Notch"), action: #selector(toggleNotch(_:)), keyEquivalent: "n")
         toggleItem.target = self
         menu.addItem(toggleItem)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "退出 Peanotch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: L10n.t("退出 Peanotch", "Quit Peanotch"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
 

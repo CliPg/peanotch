@@ -8,8 +8,10 @@ import SwiftUI
 struct NotchView: View {
     var onBandTap: () -> Void = {}
     var onEditCountdowns: () -> Void = {}
+    var onOpenSettings: () -> Void = {}
 
     @EnvironmentObject var layout: NotchLayoutState
+    @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var weather: WeatherService
     @EnvironmentObject var calendarService: CalendarService
     @EnvironmentObject var battery: BatteryService
@@ -21,24 +23,27 @@ struct NotchView: View {
     /// Sapphire's expansion curve: noticeable overshoot, quick settle.
     private static let expansionAnimation = Animation.spring(response: 0.4, dampingFraction: 0.55, blendDuration: 0)
 
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
+    private var isEnglish: Bool { settings.resolvedLanguage == "en" }
+    private var localeIdentifier: String { isEnglish ? "en_US" : "zh_CN" }
 
-    private static let dateLongFormatter: DateFormatter = {
+    private func formattedTime(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 EEEE"
-        return formatter
-    }()
+        formatter.locale = Locale(identifier: localeIdentifier)
+        formatter.dateFormat = settings.clock24h ? "HH:mm" : "h:mm a"
+        return formatter.string(from: date)
+    }
 
-    private static let eventTimeFormatter: DateFormatter = {
+    private var longDateText: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
+        formatter.locale = Locale(identifier: localeIdentifier)
+        formatter.dateFormat = isEnglish ? "EEE, MMM d" : "M月d日 EEEE"
+        return formatter.string(from: now)
+    }
+
+    /// Celsius -> display unit.
+    private func displayTemp(_ celsius: Int) -> Int {
+        settings.tempUnit == "f" ? Int((Double(celsius) * 9 / 5 + 32).rounded()) : celsius
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,6 +56,18 @@ struct NotchView: View {
             .frame(height: layout.compactHeight)
             .contentShape(Rectangle())
             .onTapGesture { onBandTap() }
+            .overlay(alignment: .topLeading) {
+                if layout.expanded {
+                    Button(action: onOpenSettings) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.white.opacity(0.45))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 10)
+                    .padding(.top, 9)
+                }
+            }
             if layout.expanded {
                 expandedCards
                     .padding(.horizontal, 14)
@@ -95,7 +112,7 @@ struct NotchView: View {
         HStack(spacing: 2) {
             Spacer(minLength: 0)
             if let snapshot = weather.snapshot {
-                Text("\(snapshot.temperature)°")
+                Text("\(displayTemp(snapshot.temperature))°")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(Color.white.opacity(0.92))
@@ -146,13 +163,13 @@ struct NotchView: View {
 
     private var clockCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("现在")
+            sectionLabel(L10n.t("现在", "Now"))
             VStack(alignment: .leading, spacing: 2) {
-                Text(Self.timeFormatter.string(from: now))
+                Text(formattedTime(now))
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(Color.white)
-                Text(Self.dateLongFormatter.string(from: now))
+                Text(longDateText)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.white.opacity(0.6))
             }
@@ -167,7 +184,7 @@ struct NotchView: View {
                         .monospacedDigit()
                         .foregroundStyle(Color.white)
                     if battery.charging {
-                        Text("充电中")
+                        Text(L10n.t("充电中", "Charging"))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(Color.green)
                     }
@@ -191,7 +208,7 @@ struct NotchView: View {
     private var weatherCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                sectionLabel("天气")
+                sectionLabel(L10n.t("天气", "Weather"))
                 Spacer()
                 Text(weather.place ?? "—")
                     .font(.system(size: 10))
@@ -204,7 +221,7 @@ struct NotchView: View {
                     .foregroundStyle(Color.white)
                     .frame(width: 40)
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(weather.snapshot.map { "\($0.temperature)" } ?? "--")
+                    Text(weather.snapshot.map { String(displayTemp($0.temperature)) } ?? "--")
                         .font(.system(size: 30, weight: .bold, design: .rounded))
                         .monospacedDigit()
                     Text("°")
@@ -219,8 +236,8 @@ struct NotchView: View {
                         .fixedSize(horizontal: true, vertical: false)
                     if let snapshot = weather.snapshot {
                         HStack(spacing: 8) {
-                            Text("H \(snapshot.high)°").foregroundStyle(Color.white.opacity(0.55))
-                            Text("L \(snapshot.low)°").foregroundStyle(Color.white.opacity(0.55))
+                            Text("H \(displayTemp(snapshot.high))°").foregroundStyle(Color.white.opacity(0.55))
+                            Text("L \(displayTemp(snapshot.low))°").foregroundStyle(Color.white.opacity(0.55))
                         }
                         .font(.system(size: 11, design: .rounded))
                         .monospacedDigit()
@@ -231,7 +248,7 @@ struct NotchView: View {
             }
             if weather.state == .failed || weather.state == .denied {
                 HStack {
-                    Button(weather.state == .denied ? "去系统设置开启定位" : "重试") {
+                    Button(weather.state == .denied ? L10n.t("去系统设置开启定位", "Enable location in Settings") : L10n.t("重试", "Retry")) {
                         if weather.state == .denied {
                             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Location") {
                                 NSWorkspace.shared.open(url)
@@ -256,16 +273,16 @@ struct NotchView: View {
     private var calendarCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                sectionLabel("日历")
+                sectionLabel(L10n.t("日历", "Calendar"))
                 Spacer()
-                Text(Self.monthFormatter.string(from: calendarService.selectedDate))
+                Text(monthText)
                     .font(.system(size: 10))
                     .foregroundStyle(Color.white.opacity(0.45))
             }
             dayStrip
             if calendarService.authorized == true {
                 if calendarService.events.isEmpty {
-                    Text(Calendar.current.isDateInToday(calendarService.selectedDate) ? "今天没有更多安排" : "这天没有安排")
+                    Text(Calendar.current.isDateInToday(calendarService.selectedDate) ? L10n.t("今天没有更多安排", "Nothing left today") : L10n.t("这天没有安排", "No events that day"))
                         .font(.system(size: 12))
                         .foregroundStyle(Color.white.opacity(0.5))
                         .padding(.top, 2)
@@ -274,7 +291,7 @@ struct NotchView: View {
                     VStack(spacing: 0) {
                         ForEach(calendarService.events.prefix(3)) { event in
                             HStack(spacing: 8) {
-                                Text(event.isAllDay ? "全天" : Self.eventTimeFormatter.string(from: event.start))
+                                Text(event.isAllDay ? L10n.t("全天", "All-day") : formattedTime(event.start))
                                     .font(.system(size: 11, weight: .medium, design: .rounded))
                                     .monospacedDigit()
                                     .foregroundStyle(Color.white.opacity(0.55))
@@ -292,14 +309,14 @@ struct NotchView: View {
                     Spacer(minLength: 0)
                 }
             } else if calendarService.authorized == false {
-                Button("点击授权日历访问") { calendarService.requestAndLoad() }
+                Button(L10n.t("点击授权日历访问", "Grant calendar access")) { calendarService.requestAndLoad() }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .buttonStyle(.plain)
                     .padding(.top, 2)
                 Spacer(minLength: 0)
             } else {
-                Text("正在请求日历权限…")
+                Text(L10n.t("正在请求日历权限…", "Requesting calendar access…"))
                     .font(.system(size: 12))
                     .foregroundStyle(Color.white.opacity(0.5))
                     .padding(.top, 2)
@@ -313,14 +330,14 @@ struct NotchView: View {
 
     // MARK: Day strip (最近几天 + 星期几, 可点选)
 
-    private static let monthFormatter: DateFormatter = {
+    private var monthText: String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月"
-        return formatter
-    }()
+        formatter.locale = Locale(identifier: localeIdentifier)
+        formatter.dateFormat = isEnglish ? "MMM" : "M月"
+        return formatter.string(from: calendarService.selectedDate)
+    }
 
-    private static let weekdaySymbols = ["日", "一", "二", "三", "四", "五", "六"]
+    private var weekdaySymbols: [String] { isEnglish ? ["S", "M", "T", "W", "T", "F", "S"] : ["日", "一", "二", "三", "四", "五", "六"] }
 
     /// Fixed Sun→Sat order: the calendar week containing today.
     private var upcomingDays: [Date] {
@@ -348,7 +365,7 @@ struct NotchView: View {
         let numberColor: Color = isPast ? Color.white.opacity(0.3)
             : (isSelected ? Color.white : Color.white.opacity(0.85))
         return VStack(spacing: 1) {
-            Text(Self.weekdaySymbols[weekdayIndex])
+            Text(weekdaySymbols[weekdayIndex])
                 .font(.system(size: 9))
                 .foregroundStyle(isToday ? Color(red: 0.96, green: 0.78, blue: 0.29)
                                          : Color.white.opacity(isSelected ? 0.75 : (isPast ? 0.25 : 0.4)))
@@ -378,7 +395,7 @@ struct NotchView: View {
     private var countdownCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                sectionLabel("倒计时")
+                sectionLabel(L10n.t("倒计时", "Countdown"))
                 Spacer()
                 Button(action: onEditCountdowns) {
                     Image(systemName: "plus.circle")
@@ -388,7 +405,7 @@ struct NotchView: View {
                 .buttonStyle(.plain)
             }
             if countdowns.sortedUpcoming.isEmpty {
-                Button("添加重要日子") { onEditCountdowns() }
+                Button(L10n.t("添加重要日子", "Add important days")) { onEditCountdowns() }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .buttonStyle(.plain)
@@ -426,7 +443,7 @@ struct NotchView: View {
                         .font(.system(size: 9))
                         .foregroundStyle(Color.white.opacity(0.45))
                 }
-                Text(isPast ? "已过" : "还剩")
+                Text(isPast ? L10n.t("已过", "ago") : L10n.t("还剩", "left"))
                     .font(.system(size: 9))
                     .foregroundStyle(Color.white.opacity(0.4))
             }
@@ -457,11 +474,11 @@ struct NotchView: View {
 extension WeatherService.LoadState {
     var stateText: String {
         switch self {
-        case .idle, .locating: return "定位中…"
-        case .loading: return "加载中…"
+        case .idle, .locating: return L10n.t("定位中…", "Locating…")
+        case .loading: return L10n.t("加载中…", "Loading…")
         case .ready: return ""
-        case .denied: return "未授权"
-        case .failed: return "获取失败"
+        case .denied: return L10n.t("未授权", "Denied")
+        case .failed: return L10n.t("获取失败", "Failed")
         }
     }
 }
