@@ -172,16 +172,36 @@ struct NotchView: View {
     // MARK: - System card (内存 / 硬盘)
 
     private var systemCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let snapshot = systemStats.snapshot
+        return VStack(alignment: .leading, spacing: 8) {
             sectionLabel(L10n.t("系统", "System"))
+            statRow(icon: "cpu",
+                    label: "CPU",
+                    value: "\(Int(snapshot.cpuUsage * 100))%",
+                    fraction: snapshot.cpuUsage)
             statRow(icon: "memorychip",
                     label: L10n.t("内存", "Memory"),
-                    used: systemStats.snapshot.memoryUsedBytes,
-                    total: systemStats.snapshot.memoryTotalBytes)
+                    value: "\(Self.gigabytes(snapshot.memoryUsedBytes)) / \(Self.gigabytes(snapshot.memoryTotalBytes))",
+                    fraction: Self.fraction(snapshot.memoryUsedBytes, total: snapshot.memoryTotalBytes))
             statRow(icon: "internaldrive",
                     label: L10n.t("硬盘", "Disk"),
-                    used: systemStats.snapshot.diskUsedBytes,
-                    total: systemStats.snapshot.diskTotalBytes)
+                    value: "\(Self.gigabytes(snapshot.diskUsedBytes)) / \(Self.gigabytes(snapshot.diskTotalBytes))",
+                    fraction: Self.fraction(snapshot.diskUsedBytes, total: snapshot.diskTotalBytes))
+            statRow(icon: "arrow.up.arrow.down",
+                    label: L10n.t("网络", "Network"),
+                    value: "↓\(Self.speed(snapshot.netDownBytesPerSec)) ↑\(Self.speed(snapshot.netUpBytesPerSec))",
+                    fraction: nil)
+            if snapshot.batteryHealthPercent > 0 {
+                statRow(icon: "bolt.batteryblock",
+                        label: L10n.t("电池健康", "Battery Health"),
+                        value: snapshot.batteryCycleCount > 0
+                            ? "\(snapshot.batteryHealthPercent)% · \(snapshot.batteryCycleCount)\(L10n.t("循环", " cycles"))"
+                            : "\(snapshot.batteryHealthPercent)%",
+                        fraction: Double(snapshot.batteryHealthPercent) / 100,
+                        barColor: snapshot.batteryHealthPercent >= 80 ? Color.green
+                            : (snapshot.batteryHealthPercent >= 60 ? Color(red: 0.96, green: 0.78, blue: 0.29)
+                                                                  : Color(red: 1.0, green: 0.42, blue: 0.24)))
+            }
             Spacer(minLength: 0)
         }
         .padding(14)
@@ -189,8 +209,8 @@ struct NotchView: View {
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
     }
 
-    private func statRow(icon: String, label: String, used: Int64, total: Int64) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+    private func statRow(icon: String, label: String, value: String, fraction: Double?, barColor: Color? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
@@ -199,21 +219,23 @@ struct NotchView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Color.white.opacity(0.85))
                 Spacer(minLength: 4)
-                Text("\(Self.gigabytes(used)) / \(Self.gigabytes(total))")
+                Text(value)
                     .font(.system(size: 10, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(Color.white.opacity(0.5))
                     .fixedSize(horizontal: true, vertical: false)
             }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.15))
-                    Capsule()
-                        .fill(Self.usageColor(used, total: total))
-                        .frame(width: proxy.size.width * Self.fraction(used, total: total))
+            if let fraction {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.15))
+                        Capsule()
+                            .fill(barColor ?? Self.usageColor(fraction))
+                            .frame(width: proxy.size.width * fraction)
+                    }
                 }
+                .frame(height: 4)
             }
-            .frame(height: 4)
         }
     }
 
@@ -222,11 +244,17 @@ struct NotchView: View {
         return min(1, max(0, Double(used) / Double(total)))
     }
 
-    private static func usageColor(_ used: Int64, total: Int64) -> Color {
-        let ratio = fraction(used, total: total)
+    private static func usageColor(_ ratio: Double) -> Color {
         if ratio > 0.9 { return Color(red: 1.0, green: 0.42, blue: 0.24) }
         if ratio > 0.75 { return Color(red: 0.96, green: 0.78, blue: 0.29) }
         return Color.white.opacity(0.85)
+    }
+
+    private static func speed(_ bytesPerSec: Int64) -> String {
+        let bytes = Double(bytesPerSec)
+        if bytes >= 1_000_000 { return String(format: "%.1fM/s", bytes / 1_000_000) }
+        if bytes >= 1_000 { return String(format: "%.0fK/s", bytes / 1_000) }
+        return String(format: "%.0fB/s", bytes)
     }
 
     private static func gigabytes(_ bytes: Int64) -> String {
