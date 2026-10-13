@@ -164,7 +164,7 @@ struct NotchView: View {
             countdownCard
                 .frame(width: 210)
             systemCard
-                .frame(width: 175)
+                .frame(width: 195)
         }
         .frame(height: 215)
     }
@@ -223,6 +223,7 @@ struct NotchView: View {
                     .font(.system(size: 10, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(Color.white.opacity(0.5))
+                    .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
             if let fraction {
@@ -252,9 +253,9 @@ struct NotchView: View {
 
     private static func speed(_ bytesPerSec: Int64) -> String {
         let bytes = Double(bytesPerSec)
-        if bytes >= 1_000_000 { return String(format: "%.1fM/s", bytes / 1_000_000) }
-        if bytes >= 1_000 { return String(format: "%.0fK/s", bytes / 1_000) }
-        return String(format: "%.0fB/s", bytes)
+        if bytes >= 1_000_000 { return String(format: "%.1fM", bytes / 1_000_000) }
+        if bytes >= 1_000 { return String(format: "%.0fK", bytes / 1_000) }
+        return String(format: "%.0fB", bytes)
     }
 
     private static func gigabytes(_ bytes: Int64) -> String {
