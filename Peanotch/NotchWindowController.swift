@@ -208,9 +208,11 @@ final class NotchWindowController {
                                   defer: false)
             window.title = "倒计时设置"
             window.isReleasedWhenClosed = false
-            // Utility window from a menu-bar app: float above normal windows
-            // so it is never buried under whatever was frontmost.
-            window.level = .floating
+            // The notch canvas sits at .statusBar (25); a plain .floating (3)
+            // window renders UNDER it and gets covered by the black surface
+            // whenever it enters the canvas region (top 42% of the screen).
+            // Stay one level above the canvas.
+            window.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
             window.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
             window.contentView = NSHostingView(rootView: CountdownEditorView(service: countdownService,
                                                                              onDone: { [weak window] in
