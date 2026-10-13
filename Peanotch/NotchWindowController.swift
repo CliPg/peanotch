@@ -7,7 +7,7 @@ final class NotchLayoutState: ObservableObject {
     @Published var sideInset: CGFloat = 56
     @Published var compactWidth: CGFloat = 291
     @Published var compactHeight: CGFloat = 32
-    @Published var expandedWidth: CGFloat = 780
+    @Published var expandedWidth: CGFloat = 900
     @Published var expandedHeight: CGFloat = 228
 }
 
@@ -25,6 +25,8 @@ final class NotchWindowController {
     private var compactFrame: NSRect = .zero   // surface rect on screen when compact
     private var expandedFrame: NSRect = .zero  // surface rect on screen when expanded
     private let panel: NSPanel
+    private let countdownService = CountdownService()
+    private var editorWindow: NSWindow?
     private var isExpanded = false
     private var isVisible = true
     private var eventMonitors: [Any] = []
@@ -46,11 +48,14 @@ final class NotchWindowController {
 
         let hostingView = NSHostingView(rootView: NotchView(onBandTap: { [weak self] in
             self?.toggleExpansion()
+        }, onEditCountdowns: { [weak self] in
+            self?.showCountdownEditor()
         })
             .environmentObject(layout)
             .environmentObject(services.weather)
             .environmentObject(services.calendar)
-            .environmentObject(services.battery))
+            .environmentObject(services.battery)
+            .environmentObject(countdownService))
         // The canvas window owns its size; SwiftUI animates within it.
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
@@ -116,7 +121,7 @@ final class NotchWindowController {
 
         layout.compactWidth = notchWidth + sideInset * 2
         layout.compactHeight = bandHeight
-        layout.expandedWidth = min(780, screen.frame.width - 80)
+        layout.expandedWidth = min(900, screen.frame.width - 80)
         layout.expandedHeight = 228
 
         compactFrame = NSRect(x: screen.frame.midX - layout.compactWidth / 2,
@@ -191,5 +196,26 @@ final class NotchWindowController {
         guard isExpanded else { return }
         isExpanded = false
         layout.expanded = false
+    }
+
+    // MARK: - Countdown editor window
+
+    private func showCountdownEditor() {
+        if editorWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
+                                  styleMask: [.titled, .closable],
+                                  backing: .buffered,
+                                  defer: false)
+            window.title = "倒计时设置"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: CountdownEditorView(service: countdownService,
+                                                                             onDone: { [weak window] in
+                                                                                 window?.orderOut(nil)
+                                                                             }))
+            editorWindow = window
+        }
+        editorWindow?.center()
+        editorWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

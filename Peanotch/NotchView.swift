@@ -7,11 +7,13 @@ import SwiftUI
 /// (dashboard) — Sapphire uses .spring(response: 0.4, dampingFraction: 0.55).
 struct NotchView: View {
     var onBandTap: () -> Void = {}
+    var onEditCountdowns: () -> Void = {}
 
     @EnvironmentObject var layout: NotchLayoutState
     @EnvironmentObject var weather: WeatherService
     @EnvironmentObject var calendarService: CalendarService
     @EnvironmentObject var battery: BatteryService
+    @EnvironmentObject var countdowns: CountdownService
 
     @State private var now = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -136,6 +138,8 @@ struct NotchView: View {
             weatherCard
             calendarCard
                 .frame(width: 230)
+            countdownCard
+                .frame(width: 210)
         }
         .frame(height: 170)
     }
@@ -367,6 +371,74 @@ struct NotchView: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(Capsule().fill(Color.white.opacity(0.08)))
+    }
+
+    // MARK: - Countdown card (重要日子倒计时)
+
+    private var countdownCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                sectionLabel("倒计时")
+                Spacer()
+                Button(action: onEditCountdowns) {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+            }
+            if countdowns.sortedUpcoming.isEmpty {
+                Button("添加重要日子") { onEditCountdowns() }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.7))
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                Spacer(minLength: 0)
+            } else {
+                VStack(spacing: 0) {
+                    let nearestUpcomingId = countdowns.sortedUpcoming
+                        .first { countdowns.daysRemaining(for: $0) >= 0 }?.id
+                    ForEach(countdowns.sortedUpcoming.prefix(3)) { countdown in
+                        countdownRow(countdown, highlight: countdown.id == nearestUpcomingId)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    private func countdownRow(_ countdown: Countdown, highlight: Bool) -> some View {
+        let days = countdowns.daysRemaining(for: countdown)
+        let isPast = days < 0
+        let numberColor: Color = isPast ? Color.white.opacity(0.35)
+            : (highlight ? Color(red: 0.96, green: 0.78, blue: 0.29) : Color.white)
+        return HStack(spacing: 10) {
+            VStack(alignment: .trailing, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text("\(abs(days))")
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(numberColor)
+                    Text("天")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+                Text(isPast ? "已过" : "还剩")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
+            .frame(width: 56, alignment: .trailing)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(width: 0.5, height: 28)
+            Text(countdown.title)
+                .font(.system(size: 12))
+                .foregroundStyle(isPast ? Color.white.opacity(0.5) : Color.white)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .frame(height: 38)
     }
 
     private var batterySymbol: String {
