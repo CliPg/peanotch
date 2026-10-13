@@ -175,9 +175,24 @@ final class NotchWindowController {
             self?.handleMouseDown()
         } as Any)
         eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: downs) { [weak self] event in
+            if event.window === self?.panel {
+                self?.resignFieldEditorIfClickedOutside(event)
+            }
             self?.handleMouseDown()
             return event
         } as Any)
+    }
+
+    /// Deterministic caret dismissal: while a field editor (the SwiftUI
+    /// TextField's editor) is first responder, any canvas click that does not
+    /// land inside its frame ends editing. SwiftUI-internal hitTest results
+    /// proved unreliable for this.
+    private func resignFieldEditorIfClickedOutside(_ event: NSEvent) {
+        guard let editor = panel.firstResponder as? NSTextView else { return }
+        let editorFrame = editor.convert(NSRect(origin: .zero, size: editor.bounds.size), to: nil)
+        if !editorFrame.insetBy(dx: -4, dy: -4).contains(event.locationInWindow) {
+            panel.makeFirstResponder(nil)
+        }
     }
 
     /// Transparent Sapphire-style probe over the notch region. NSTrackingArea
