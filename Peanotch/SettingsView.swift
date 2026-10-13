@@ -77,7 +77,15 @@ struct SettingsView: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                 }
+                rowDivider
+                settingsRow(L10n.t("震动反馈", "Haptic feedback")) {
+                    Toggle("", isOn: $settings.hapticFeedback)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
             }
+            footnote(L10n.t("仪表盘展开时在触控板上产生轻微震动（需要 Force Touch 触控板，鼠标操作无效）。",
+                            "Subtle trackpad tick when the dashboard opens (Force Touch trackpad required; no effect with a mouse)."))
         }
     }
 

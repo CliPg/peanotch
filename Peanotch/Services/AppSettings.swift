@@ -20,11 +20,16 @@ final class AppSettings: ObservableObject {
     @Published var clock24h: Bool {
         didSet { UserDefaults.standard.set(clock24h, forKey: Self.clock24hKey) }
     }
+    /// Trackpad haptic tick when the dashboard opens
+    @Published var hapticFeedback: Bool {
+        didSet { UserDefaults.standard.set(hapticFeedback, forKey: Self.hapticKey) }
+    }
 
     private static let languageKey = "peanotch.settings.language"
     private static let openModeKey = "peanotch.settings.openMode"
     private static let tempUnitKey = "peanotch.settings.tempUnit"
     private static let clock24hKey = "peanotch.settings.clock24h"
+    private static let hapticKey = "peanotch.settings.haptic"
 
     var resolvedLanguage: String {
         if language == "zh" || language == "en" { return language }
@@ -37,6 +42,7 @@ final class AppSettings: ObservableObject {
         openMode = defaults.string(forKey: Self.openModeKey) ?? "click"
         tempUnit = defaults.string(forKey: Self.tempUnitKey) ?? "c"
         clock24h = defaults.object(forKey: Self.clock24hKey) as? Bool ?? true
+        hapticFeedback = defaults.object(forKey: Self.hapticKey) as? Bool ?? true
     }
 }
 

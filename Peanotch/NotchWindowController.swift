@@ -270,6 +270,9 @@ final class NotchWindowController {
         guard !isExpanded else { return }
         isExpanded = true
         layout.expanded = true
+        if AppSettings.shared.hapticFeedback {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
     }
 
     private func collapse() {
