@@ -175,8 +175,10 @@ final class NotchWindowController {
             self?.handleMouseDown()
         } as Any)
         eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: downs) { [weak self] event in
-            if event.window === self?.panel {
-                self?.resignFieldEditorIfClickedOutside(event)
+            if let window = event.window,
+               let self,
+               window === self.panel || window === self.editorWindow || window === self.settingsWindow {
+                self.resignFieldEditorIfClickedOutside(event, in: window)
             }
             self?.handleMouseDown()
             return event
@@ -187,11 +189,11 @@ final class NotchWindowController {
     /// TextField's editor) is first responder, any canvas click that does not
     /// land inside its frame ends editing. SwiftUI-internal hitTest results
     /// proved unreliable for this.
-    private func resignFieldEditorIfClickedOutside(_ event: NSEvent) {
-        guard let editor = panel.firstResponder as? NSTextView else { return }
+    private func resignFieldEditorIfClickedOutside(_ event: NSEvent, in window: NSWindow) {
+        guard let editor = window.firstResponder as? NSTextView else { return }
         let editorFrame = editor.convert(NSRect(origin: .zero, size: editor.bounds.size), to: nil)
         if !editorFrame.insetBy(dx: -4, dy: -4).contains(event.locationInWindow) {
-            panel.makeFirstResponder(nil)
+            window.makeFirstResponder(nil)
         }
     }
 
