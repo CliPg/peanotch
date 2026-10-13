@@ -26,6 +26,13 @@ final class CountdownService: ObservableObject {
         countdowns.append(Countdown(title: title, date: date))
     }
 
+    /// Mutates one entry by id; persistence rides on the @Published didSet.
+    func update(id: UUID, _ mutate: (inout Countdown) -> Void) {
+        if let index = countdowns.firstIndex(where: { $0.id == id }) {
+            mutate(&countdowns[index])
+        }
+    }
+
     func remove(_ countdown: Countdown) {
         countdowns.removeAll { $0.id == countdown.id }
     }

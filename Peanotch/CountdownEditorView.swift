@@ -9,6 +9,20 @@ struct CountdownEditorView: View {
     @State private var newTitle = ""
     @State private var newDate = Date()
 
+    private func titleBinding(_ countdown: Countdown) -> Binding<String> {
+        Binding(
+            get: { self.service.countdowns.first(where: { $0.id == countdown.id })?.title ?? "" },
+            set: { newValue in self.service.update(id: countdown.id) { $0.title = newValue } }
+        )
+    }
+
+    private func dateBinding(_ countdown: Countdown) -> Binding<Date> {
+        Binding(
+            get: { self.service.countdowns.first(where: { $0.id == countdown.id })?.date ?? Date() },
+            set: { newValue in self.service.update(id: countdown.id) { $0.date = newValue } }
+        )
+    }
+
     private var displayFormatter: DateFormatter {
         let formatter = DateFormatter()
         let english = settings.resolvedLanguage == "en"
@@ -49,13 +63,11 @@ struct CountdownEditorView: View {
                             }
                             .frame(width: 52, alignment: .trailing)
                             Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 0.5, height: 26)
-                            Text(countdown.title)
+                            TextField(L10n.t("名称", "Title"), text: titleBinding(countdown))
+                                .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 12))
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                            Text(displayFormatter.string(from: countdown.date))
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.secondary)
+                            DatePicker("", selection: dateBinding(countdown), displayedComponents: .date)
+                                .labelsHidden()
                             Button {
                                 service.remove(countdown)
                             } label: {
