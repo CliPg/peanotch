@@ -29,6 +29,7 @@ final class NotchWindowController {
     private var editorWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var hoverProbe: NSPanel?
+    private var pollTimer: Timer?
     private var collapseCheck: Timer?
     private var isExpanded = false
     private var isVisible = true
@@ -72,6 +73,9 @@ final class NotchWindowController {
 
         installHoverMonitors()
         installHoverProbe()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            self?.evaluateHover()
+        }
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -90,6 +94,7 @@ final class NotchWindowController {
 
     deinit {
         eventMonitors.forEach { NSEvent.removeMonitor($0) }
+        pollTimer?.invalidate()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
     }
 
@@ -186,7 +191,10 @@ final class NotchWindowController {
         probe.isOpaque = false
         probe.backgroundColor = .clear
         probe.hasShadow = false
-        probe.ignoresMouseEvents = false
+        // Click-through: enter/exit tracking areas fire regardless; a false
+        // value here swallows every click over the whole probe region (which
+        // made the top of the screen unclickable).
+        probe.ignoresMouseEvents = true
         let probeView = HoverProbeView(frame: NSRect(origin: .zero, size: probeFrame.size))
         probeView.onHoverEvent = { [weak self] in self?.evaluateHover() }
         probe.contentView = probeView
@@ -225,7 +233,11 @@ final class NotchWindowController {
     /// The big canvas intercepts clicks only over the live surface.
     private func updateMouseEventHandling() {
         let surface = isExpanded ? expandedFrame : compactFrame
-        panel.ignoresMouseEvents = !surface.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
+        let accepts = surface.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
+        if panel.ignoresMouseEvents == accepts {
+            panel.ignoresMouseEvents = !accepts
+            Diagnostics.record("canvas events -> \(accepts ? "accepting (over surface)" : "passthrough"), at \(NSEvent.mouseLocation)")
+        }
     }
 
     private func toggleExpansion() {
