@@ -16,6 +16,7 @@ struct NotchView: View {
     @EnvironmentObject var calendarService: CalendarService
     @EnvironmentObject var battery: BatteryService
     @EnvironmentObject var countdowns: CountdownService
+    @EnvironmentObject var reminderService: ReminderService
 
     @State private var now = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -89,6 +90,9 @@ struct NotchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(Self.expansionAnimation, value: layout.expanded)
         .onReceive(timer) { now = $0 }
+        .onChange(of: calendarService.selectedDate) { newDate in
+            reminderService.load(for: newDate)
+        }
     }
 
     // MARK: - Compact band (side wings beside the notch)
@@ -158,7 +162,7 @@ struct NotchView: View {
             countdownCard
                 .frame(width: 210)
         }
-        .frame(height: 170)
+        .frame(height: 200)
     }
 
     private var clockCard: some View {
@@ -281,29 +285,16 @@ struct NotchView: View {
             }
             dayStrip
             if calendarService.authorized == true {
-                if calendarService.events.isEmpty {
-                    Text(Calendar.current.isDateInToday(calendarService.selectedDate) ? L10n.t("今天没有更多安排", "Nothing left today") : L10n.t("这天没有安排", "No events that day"))
+                if scheduleItems.isEmpty {
+                    Text(Calendar.current.isDateInToday(calendarService.selectedDate) ? L10n.t("今天没有安排", "Nothing scheduled today") : L10n.t("这天没有安排", "Nothing scheduled"))
                         .font(.system(size: 12))
                         .foregroundStyle(Color.white.opacity(0.5))
                         .padding(.top, 2)
                     Spacer(minLength: 0)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(calendarService.events.prefix(3)) { event in
-                            HStack(spacing: 8) {
-                                Text(event.isAllDay ? L10n.t("全天", "All-day") : formattedTime(event.start))
-                                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                                    .monospacedDigit()
-                                    .foregroundStyle(Color.white.opacity(0.55))
-                                    .frame(width: 40, alignment: .leading)
-                                Circle().fill(Color(red: 0.96, green: 0.78, blue: 0.29)).frame(width: 5, height: 5)
-                                Text(event.title)
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color.white)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .frame(height: 26)
+                        ForEach(scheduleItems) { item in
+                            scheduleRow(item)
                         }
                     }
                     Spacer(minLength: 0)
@@ -326,6 +317,77 @@ struct NotchView: View {
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    // MARK: Unified day schedule (events + reminders, Sapphire-style)
+
+    private struct ScheduleItem: Identifiable {
+        let id: String
+        let title: String
+        let time: Date?
+        let untimed: Bool
+        let reminder: ReminderService.Reminder?
+    }
+
+    /// Events and reminders for the selected day, merged and time-sorted
+    /// (untimed items last), like Sapphire's calendar detail.
+    private var scheduleItems: [ScheduleItem] {
+        var items: [ScheduleItem] = []
+        for event in calendarService.events.prefix(3) {
+            items.append(ScheduleItem(id: "event:\(event.id)", title: event.title,
+                                      time: event.start, untimed: event.isAllDay, reminder: nil))
+        }
+        if reminderService.authorized == true {
+            for reminder in reminderService.reminders {
+                items.append(ScheduleItem(id: "reminder:\(reminder.id)", title: reminder.title,
+                                          time: reminder.due, untimed: !reminder.hasTime, reminder: reminder))
+            }
+        }
+        items.sort {
+            switch ($0.time, $1.time) {
+            case let (a?, b?): return a < b
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return false
+            }
+        }
+        return Array(items.prefix(5))
+    }
+
+    private func scheduleRow(_ item: ScheduleItem) -> some View {
+        HStack(spacing: 8) {
+            if let reminder = item.reminder {
+                Button {
+                    reminderService.toggleComplete(reminder)
+                } label: {
+                    Image(systemName: "circle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Circle().fill(Color(red: 0.96, green: 0.78, blue: 0.29)).frame(width: 5, height: 5)
+            }
+            Group {
+                if item.untimed {
+                    Text(item.reminder != nil ? L10n.t("待办", "To-do") : L10n.t("全天", "All-day"))
+                } else if let time = item.time {
+                    Text(formattedTime(time))
+                } else {
+                    Text("")
+                }
+            }
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(Color.white.opacity(0.55))
+            .frame(width: 40, alignment: .leading)
+            Text(item.title)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .frame(height: 26)
     }
 
     // MARK: Day strip (最近几天 + 星期几, 可点选)
