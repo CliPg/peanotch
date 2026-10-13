@@ -318,10 +318,13 @@ struct NotchView: View {
 
     private static let weekdaySymbols = ["日", "一", "二", "三", "四", "五", "六"]
 
+    /// Fixed Sun→Sat order: the calendar week containing today.
     private var upcomingDays: [Date] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+        let weekday = calendar.component(.weekday, from: today) // 1 = Sunday
+        let sunday = calendar.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: sunday) }
     }
 
     private var dayStrip: some View {
@@ -337,15 +340,18 @@ struct NotchView: View {
         let weekdayIndex = calendar.component(.weekday, from: day) - 1
         let isSelected = calendar.isDate(day, inSameDayAs: calendarService.selectedDate)
         let isToday = calendar.isDateInToday(day)
+        let isPast = day < calendar.startOfDay(for: Date())
+        let numberColor: Color = isPast ? Color.white.opacity(0.3)
+            : (isSelected ? Color.white : Color.white.opacity(0.85))
         return VStack(spacing: 1) {
             Text(Self.weekdaySymbols[weekdayIndex])
                 .font(.system(size: 9))
                 .foregroundStyle(isToday ? Color(red: 0.96, green: 0.78, blue: 0.29)
-                                         : Color.white.opacity(isSelected ? 0.75 : 0.4))
+                                         : Color.white.opacity(isSelected ? 0.75 : (isPast ? 0.25 : 0.4)))
             Text("\(calendar.component(.day, from: day))")
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.85))
+                .foregroundStyle(numberColor)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 4)
