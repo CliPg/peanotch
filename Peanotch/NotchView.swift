@@ -17,6 +17,7 @@ struct NotchView: View {
     @EnvironmentObject var battery: BatteryService
     @EnvironmentObject var countdowns: CountdownService
     @EnvironmentObject var reminderService: ReminderService
+    @EnvironmentObject var systemStats: SystemStatsService
 
     @State private var now = Date()
     @State private var newReminderTitle = ""
@@ -162,8 +163,74 @@ struct NotchView: View {
                 .frame(width: 230)
             countdownCard
                 .frame(width: 210)
+            systemCard
+                .frame(width: 175)
         }
         .frame(height: 215)
+    }
+
+    // MARK: - System card (内存 / 硬盘)
+
+    private var systemCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionLabel(L10n.t("系统", "System"))
+            statRow(icon: "memorychip",
+                    label: L10n.t("内存", "Memory"),
+                    used: systemStats.snapshot.memoryUsedBytes,
+                    total: systemStats.snapshot.memoryTotalBytes)
+            statRow(icon: "internaldrive",
+                    label: L10n.t("硬盘", "Disk"),
+                    used: systemStats.snapshot.diskUsedBytes,
+                    total: systemStats.snapshot.diskTotalBytes)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    private func statRow(icon: String, label: String, used: Int64, total: Int64) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.7))
+                Text(label)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                Spacer(minLength: 4)
+                Text("\(Self.gigabytes(used)) / \(Self.gigabytes(total))")
+                    .font(.system(size: 10, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.5))
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.15))
+                    Capsule()
+                        .fill(Self.usageColor(used, total: total))
+                        .frame(width: proxy.size.width * Self.fraction(used, total: total))
+                }
+            }
+            .frame(height: 4)
+        }
+    }
+
+    private static func fraction(_ used: Int64, total: Int64) -> Double {
+        guard total > 0 else { return 0 }
+        return min(1, max(0, Double(used) / Double(total)))
+    }
+
+    private static func usageColor(_ used: Int64, total: Int64) -> Color {
+        let ratio = fraction(used, total: total)
+        if ratio > 0.9 { return Color(red: 1.0, green: 0.42, blue: 0.24) }
+        if ratio > 0.75 { return Color(red: 0.96, green: 0.78, blue: 0.29) }
+        return Color.white.opacity(0.85)
+    }
+
+    private static func gigabytes(_ bytes: Int64) -> String {
+        String(format: "%.0fG", Double(bytes) / 1_000_000_000)
     }
 
     private var clockCard: some View {

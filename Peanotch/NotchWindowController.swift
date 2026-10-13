@@ -7,7 +7,7 @@ final class NotchLayoutState: ObservableObject {
     @Published var sideInset: CGFloat = 56
     @Published var compactWidth: CGFloat = 291
     @Published var compactHeight: CGFloat = 32
-    @Published var expandedWidth: CGFloat = 900
+    @Published var expandedWidth: CGFloat = 1080
     @Published var expandedHeight: CGFloat = 273
 }
 
@@ -27,6 +27,7 @@ final class NotchWindowController {
     private let panel: NSPanel
     private let countdownService = CountdownService()
     private let reminderService = ReminderService()
+    private let systemStats = SystemStatsService()
     private var editorWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var hoverProbe: NSPanel?
@@ -64,8 +65,10 @@ final class NotchWindowController {
             .environmentObject(services.battery)
             .environmentObject(countdownService)
             .environmentObject(reminderService)
+            .environmentObject(systemStats)
             .environmentObject(AppSettings.shared))
         reminderService.requestAccess()
+        systemStats.start()
         // The canvas window owns its size; SwiftUI animates within it.
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
@@ -140,7 +143,7 @@ final class NotchWindowController {
 
         layout.compactWidth = notchWidth + sideInset * 2
         layout.compactHeight = bandHeight
-        layout.expandedWidth = min(900, screen.frame.width - 80)
+        layout.expandedWidth = min(1080, screen.frame.width - 80)
         layout.expandedHeight = 273
 
         compactFrame = NSRect(x: screen.frame.midX - layout.compactWidth / 2,
