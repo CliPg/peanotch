@@ -28,6 +28,7 @@ final class NotchWindowController {
     private let countdownService = CountdownService()
     private var editorWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var hoverProbe: NSPanel?
     private var collapseCheck: Timer?
     private var isExpanded = false
     private var isVisible = true
@@ -70,6 +71,7 @@ final class NotchWindowController {
         panel.setFrame(canvasFrame, display: true)
 
         installHoverMonitors()
+        installHoverProbe()
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -77,6 +79,10 @@ final class NotchWindowController {
             guard let self else { return }
             self.computeFrames()
             self.panel.setFrame(self.canvasFrame, display: true)
+            if let probe = self.hoverProbe {
+                probe.setFrame(self.probeFrame, display: false)
+                probe.orderFrontRegardless()
+            }
         }
 
         Diagnostics.record("canvas created, frame=\(canvasFrame), compact=\(compactFrame), expanded=\(expandedFrame), screen=\(panel.screen?.localizedName ?? "nil")")
@@ -148,18 +154,11 @@ final class NotchWindowController {
 
     // MARK: - Pointer tracking + click handling
 
-    /// Mouse moves only toggle whether the canvas accepts events over the live
-    /// surface; expansion is click-driven, not hover-driven.
+    /// Clicks only — pointer MOVEMENT is tracked by the hover probe window:
+    /// NSEvent monitors never see mouseMoved while the cursor is inside the
+    /// menu bar (which is exactly where the notch lives), so they can't drive
+    /// proximity expansion.
     private func installHoverMonitors() {
-        let moves: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
-        eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: moves) { [weak self] _ in
-            self?.updateMouseEventHandling()
-        } as Any)
-        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: moves) { [weak self] event in
-            self?.updateMouseEventHandling()
-            return event
-        } as Any)
-
         let downs: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: downs) { [weak self] _ in
             self?.handleMouseDown()
@@ -168,6 +167,52 @@ final class NotchWindowController {
             self?.handleMouseDown()
             return event
         } as Any)
+    }
+
+    /// Transparent Sapphire-style probe over the notch region. NSTrackingArea
+    /// is position-driven (works while the cursor is in the menu bar); its
+    /// hitTest returns nil so every click passes through untouched.
+    private var probeFrame: NSRect {
+        expandedFrame.insetBy(dx: -6, dy: -10)
+    }
+
+    private func installHoverProbe() {
+        let probe = NSPanel(contentRect: probeFrame,
+                            styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered,
+                            defer: false)
+        probe.level = .statusBar
+        probe.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        probe.isOpaque = false
+        probe.backgroundColor = .clear
+        probe.hasShadow = false
+        probe.ignoresMouseEvents = false
+        let probeView = HoverProbeView(frame: NSRect(origin: .zero, size: probeFrame.size))
+        probeView.onHoverEvent = { [weak self] in self?.evaluateHover() }
+        probe.contentView = probeView
+        probe.setFrame(probeFrame, display: false)
+        probe.orderFrontRegardless()
+        hoverProbe = probe
+    }
+
+    /// Probe-driven pointer evaluation: hover mode expands/collapses by
+    /// proximity; click mode only refreshes event passthrough here.
+    private func evaluateHover() {
+        guard isVisible else { return }
+        let location = NSEvent.mouseLocation
+        if AppSettings.shared.openMode == "hover" {
+            if isExpanded {
+                if expandedFrame.insetBy(dx: -6, dy: -6).contains(location) {
+                    collapseCheck?.invalidate()
+                    collapseCheck = nil
+                } else {
+                    scheduleCollapse()
+                }
+            } else if compactFrame.insetBy(dx: -4, dy: -8).contains(location) {
+                expand()
+            }
+        }
+        updateMouseEventHandling()
     }
 
     /// A click outside the expanded dashboard closes it (Sapphire's click mode).
@@ -184,6 +229,7 @@ final class NotchWindowController {
     }
 
     private func toggleExpansion() {
+        guard AppSettings.shared.openMode == "click" else { return }
         if isExpanded {
             collapse()
         } else {
@@ -265,7 +311,7 @@ final class NotchWindowController {
     private func showSettingsWindow() {
         settingsWindow = presentUtilityWindow(existing: settingsWindow,
                                               title: L10n.t("设置", "Settings"),
-                                              size: NSSize(width: 360, height: 340)) { window in
+                                              size: NSSize(width: 440, height: 420)) { window in
             NSHostingView(rootView: SettingsView(settings: AppSettings.shared,
                                                  onDone: { [weak window] in
                                                      window?.orderOut(nil)
