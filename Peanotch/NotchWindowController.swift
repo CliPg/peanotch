@@ -208,6 +208,10 @@ final class NotchWindowController {
                                   defer: false)
             window.title = "倒计时设置"
             window.isReleasedWhenClosed = false
+            // Utility window from a menu-bar app: float above normal windows
+            // so it is never buried under whatever was frontmost.
+            window.level = .floating
+            window.collectionBehavior = [.fullScreenAuxiliary]
             window.contentView = NSHostingView(rootView: CountdownEditorView(service: countdownService,
                                                                              onDone: { [weak window] in
                                                                                  window?.orderOut(nil)
