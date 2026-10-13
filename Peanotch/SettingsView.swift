@@ -15,44 +15,90 @@ struct SettingsView: View {
     @State private var section: SettingsSection = .general
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $section) {
-                navLabel(L10n.t("通用", "General"), icon: "gearshape", color: Color(white: 0.45), tag: .general)
-                navLabel(L10n.t("刘海", "Notch"), icon: "macwindow.on.rectangle", color: Color(red: 0.20, green: 0.47, blue: 1.00), tag: .notch)
-                navLabel(L10n.t("倒计时", "Countdowns"), icon: "calendar.badge.clock", color: Color(red: 1.00, green: 0.42, blue: 0.24), tag: .countdown)
-                navLabel(L10n.t("关于", "About"), icon: "info.circle", color: Color(red: 0.35, green: 0.60, blue: 0.95), tag: .about)
-            }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(200)
-        } detail: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    switch section {
-                    case .general: generalPane
-                    case .notch: notchPane
-                    case .countdown: countdownPane
-                    case .about: aboutPane
-                    }
-                }
-                .padding(24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        // Plain HStack split — NavigationSplitView drags in a blurred toolbar
+        // strip at the top of the detail column on macOS.
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
+            detail
         }
         .frame(minWidth: 640, minHeight: 440)
     }
 
-    // MARK: - Sidebar row
+    // MARK: - Sidebar
 
-    private func navLabel(_ title: String, icon: String, color: Color, tag: SettingsSection) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .frame(width: 24, height: 24)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(color))
-            Text(title)
+    private struct SidebarItem {
+        let tag: SettingsSection
+        let title: String
+        let icon: String
+        let color: Color
+    }
+
+    private var sidebarItems: [SidebarItem] {
+        [
+            SidebarItem(tag: .general, title: L10n.t("通用", "General"), icon: "gearshape", color: Color(white: 0.45)),
+            SidebarItem(tag: .notch, title: L10n.t("刘海", "Notch"), icon: "macwindow.on.rectangle", color: Color(red: 0.20, green: 0.47, blue: 1.00)),
+            SidebarItem(tag: .countdown, title: L10n.t("倒计时", "Countdowns"), icon: "calendar.badge.clock", color: Color(red: 1.00, green: 0.42, blue: 0.24)),
+            SidebarItem(tag: .about, title: L10n.t("关于", "About"), icon: "info.circle", color: Color(red: 0.35, green: 0.60, blue: 0.95)),
+        ]
+    }
+
+    private var sidebar: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(sidebarItems, id: \.tag) { item in
+                    sidebarButton(item)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
         }
-        .tag(tag)
+        .frame(width: 200)
+        .background(.regularMaterial)
+    }
+
+    private func sidebarButton(_ item: SidebarItem) -> some View {
+        let selected = section == item.tag
+        return Button {
+            section = item.tag
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 24, height: 24)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(item.color))
+                Text(item.title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(selected ? Color.white : Color.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background {
+            if selected {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.accentColor)
+            }
+        }
+    }
+
+    private var detail: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                switch section {
+                case .general: generalPane
+                case .notch: notchPane
+                case .countdown: countdownPane
+                case .about: aboutPane
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     // MARK: - Panes
