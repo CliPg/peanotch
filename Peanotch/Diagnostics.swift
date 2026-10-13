@@ -1,13 +1,13 @@
 import Foundation
 
 /// File-based diagnostics: NSLog alone proved unreliable to observe from outside,
-/// so every record also lands in /tmp/peanut_state.txt.
+/// so every record also lands in /tmp/peanotch_state.txt.
 enum Diagnostics {
-    static let path = "/tmp/peanut_state.txt"
+    static let path = "/tmp/peanotch_state.txt"
 
     static func record(_ message: String) {
         let line = "[\(Date())] \(message)\n"
-        NSLog("[Peanut] \(message)")
+        NSLog("[Peanotch] \(message)")
         if let handle = FileHandle(forWritingAtPath: path) {
             handle.seekToEndOfFile()
             handle.write(line.data(using: .utf8)!)
