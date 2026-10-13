@@ -8,7 +8,7 @@ final class NotchLayoutState: ObservableObject {
     @Published var compactWidth: CGFloat = 291
     @Published var compactHeight: CGFloat = 32
     @Published var expandedWidth: CGFloat = 780
-    @Published var expandedHeight: CGFloat = 208
+    @Published var expandedHeight: CGFloat = 228
 }
 
 /// Sapphire-style notch controller.
@@ -117,7 +117,7 @@ final class NotchWindowController {
         layout.compactWidth = notchWidth + sideInset * 2
         layout.compactHeight = bandHeight
         layout.expandedWidth = min(780, screen.frame.width - 80)
-        layout.expandedHeight = 208
+        layout.expandedHeight = 228
 
         compactFrame = NSRect(x: screen.frame.midX - layout.compactWidth / 2,
                               y: screen.frame.maxY - layout.compactHeight,

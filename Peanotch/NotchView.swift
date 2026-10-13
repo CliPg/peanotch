@@ -137,7 +137,7 @@ struct NotchView: View {
             calendarCard
                 .frame(width: 230)
         }
-        .frame(height: 150)
+        .frame(height: 170)
     }
 
     private var clockCard: some View {
@@ -251,13 +251,20 @@ struct NotchView: View {
 
     private var calendarCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("日历")
+            HStack {
+                sectionLabel("日历")
+                Spacer()
+                Text(Self.monthFormatter.string(from: calendarService.selectedDate))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.white.opacity(0.45))
+            }
+            dayStrip
             if calendarService.authorized == true {
                 if calendarService.events.isEmpty {
-                    Text("今天没有更多安排")
+                    Text(Calendar.current.isDateInToday(calendarService.selectedDate) ? "今天没有更多安排" : "这天没有安排")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.white.opacity(0.5))
-                        .padding(.top, 4)
+                        .padding(.top, 2)
                     Spacer(minLength: 0)
                 } else {
                     VStack(spacing: 0) {
@@ -275,7 +282,7 @@ struct NotchView: View {
                                     .lineLimit(1)
                                 Spacer(minLength: 0)
                             }
-                            .frame(height: 28)
+                            .frame(height: 26)
                         }
                     }
                     Spacer(minLength: 0)
@@ -285,19 +292,66 @@ struct NotchView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .buttonStyle(.plain)
-                    .padding(.top, 4)
+                    .padding(.top, 2)
                 Spacer(minLength: 0)
             } else {
                 Text("正在请求日历权限…")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.white.opacity(0.5))
-                    .padding(.top, 4)
+                    .padding(.top, 2)
                 Spacer(minLength: 0)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    // MARK: Day strip (最近几天 + 星期几, 可点选)
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月"
+        return formatter
+    }()
+
+    private static let weekdaySymbols = ["日", "一", "二", "三", "四", "五", "六"]
+
+    private var upcomingDays: [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+    }
+
+    private var dayStrip: some View {
+        HStack(spacing: 3) {
+            ForEach(upcomingDays, id: \.self) { day in
+                dayChip(day)
+            }
+        }
+    }
+
+    private func dayChip(_ day: Date) -> some View {
+        let calendar = Calendar.current
+        let weekdayIndex = calendar.component(.weekday, from: day) - 1
+        let isSelected = calendar.isDate(day, inSameDayAs: calendarService.selectedDate)
+        let isToday = calendar.isDateInToday(day)
+        return VStack(spacing: 1) {
+            Text(Self.weekdaySymbols[weekdayIndex])
+                .font(.system(size: 9))
+                .foregroundStyle(isToday ? Color(red: 0.96, green: 0.78, blue: 0.29)
+                                         : Color.white.opacity(isSelected ? 0.75 : 0.4))
+            Text("\(calendar.component(.day, from: day))")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.85))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(isSelected ? Color.white.opacity(0.16) : Color.clear))
+        .contentShape(Rectangle())
+        .onTapGesture { calendarService.selectDay(day) }
     }
 
     private func sectionLabel(_ text: String) -> some View {
