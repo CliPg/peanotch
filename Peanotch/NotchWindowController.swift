@@ -323,10 +323,13 @@ final class NotchWindowController {
     private func showSettingsWindow() {
         settingsWindow = presentUtilityWindow(existing: settingsWindow,
                                               title: L10n.t("设置", "Settings"),
-                                              size: NSSize(width: 440, height: 420)) { window in
+                                              size: NSSize(width: 680, height: 460)) { [weak self] window in
             NSHostingView(rootView: SettingsView(settings: AppSettings.shared,
                                                  onDone: { [weak window] in
                                                      window?.orderOut(nil)
+                                                 },
+                                                 onOpenCountdowns: { [weak self] in
+                                                     self?.showCountdownEditor()
                                                  }))
         }
     }
