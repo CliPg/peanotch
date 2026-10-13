@@ -219,23 +219,27 @@ final class NotchWindowController {
     /// Presents a titled utility window above the notch canvas. The canvas is
     /// at .statusBar (25) — a plain window would render underneath its black
     /// surface — and an accessory app must activate before ordering front.
-    private func presentUtilityWindow(_ windowRef: inout NSWindow?,
+    /// No inout: the content closure receives the window directly, so reading
+    /// self.<window> during presentation can't trip Swift's exclusivity checks
+    /// (that abort()ed the app on the first gear click).
+    private func presentUtilityWindow(existing: NSWindow?,
                                       title: String,
                                       size: NSSize,
-                                      content: @escaping () -> NSView) {
-        if windowRef == nil {
-            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
-                                  styleMask: [.titled, .closable],
-                                  backing: .buffered,
-                                  defer: false)
+                                      makeContent: (NSWindow) -> NSView) -> NSWindow {
+        let window: NSWindow
+        if let existing {
+            window = existing
+        } else {
+            window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.titled, .closable],
+                              backing: .buffered,
+                              defer: false)
             window.title = title
             window.isReleasedWhenClosed = false
             window.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
             window.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
-            window.contentView = content()
-            windowRef = window
+            window.contentView = makeContent(window)
         }
-        guard let window = windowRef else { return }
         NSApp.activate(ignoringOtherApps: true)
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -244,21 +248,26 @@ final class NotchWindowController {
             NSApp.activate(ignoringOtherApps: true)
             window?.makeKeyAndOrderFront(nil)
         }
+        return window
     }
 
     private func showCountdownEditor() {
-        presentUtilityWindow(&editorWindow, title: L10n.t("倒计时设置", "Countdowns"), size: NSSize(width: 420, height: 460)) { [weak self] in
+        editorWindow = presentUtilityWindow(existing: editorWindow,
+                                            title: L10n.t("倒计时设置", "Countdowns"),
+                                            size: NSSize(width: 420, height: 460)) { [weak self] window in
             NSHostingView(rootView: CountdownEditorView(service: self?.countdownService ?? CountdownService(),
-                                                        onDone: { [weak window = self?.editorWindow] in
+                                                        onDone: { [weak window] in
                                                             window?.orderOut(nil)
                                                         }))
         }
     }
 
     private func showSettingsWindow() {
-        presentUtilityWindow(&settingsWindow, title: L10n.t("设置", "Settings"), size: NSSize(width: 360, height: 340)) { [weak self] in
+        settingsWindow = presentUtilityWindow(existing: settingsWindow,
+                                              title: L10n.t("设置", "Settings"),
+                                              size: NSSize(width: 360, height: 340)) { window in
             NSHostingView(rootView: SettingsView(settings: AppSettings.shared,
-                                                 onDone: { [weak window = self?.settingsWindow] in
+                                                 onDone: { [weak window] in
                                                      window?.orderOut(nil)
                                                  }))
         }
