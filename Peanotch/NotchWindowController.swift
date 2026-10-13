@@ -51,7 +51,7 @@ final class NotchWindowController {
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = true
 
-        let hostingView = NSHostingView(rootView: NotchView(onBandTap: { [weak self] in
+        let hostingView = ResignOnBackgroundHostingView(rootView: NotchView(onBandTap: { [weak self] in
             self?.toggleExpansion()
         }, onEditCountdowns: { [weak self] in
             self?.showCountdownEditor()
@@ -273,6 +273,7 @@ final class NotchWindowController {
         guard isExpanded else { return }
         isExpanded = false
         layout.expanded = false
+        panel.makeFirstResponder(nil)
     }
 
     // MARK: - Utility windows (editor / settings)
@@ -343,4 +344,17 @@ final class NotchWindowController {
 /// focus without activating the app).
 final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
+}
+
+/// SwiftUI leaves the caret in the inline TextField forever when clicks land
+/// on non-interactive areas of the canvas (nothing else accepts keyboard
+/// focus). Resign first responder whenever a click hits a non-input view.
+final class ResignOnBackgroundHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let view = super.hitTest(point)
+        if let view, view !== self, !view.acceptsFirstResponder {
+            window?.makeFirstResponder(nil)
+        }
+        return view
+    }
 }
