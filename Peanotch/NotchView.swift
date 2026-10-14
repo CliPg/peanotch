@@ -21,6 +21,8 @@ struct NotchView: View {
 
     @State private var now = Date()
     @State private var newReminderTitle = ""
+    @State private var editingCountdownId: UUID?
+    @FocusState private var focusedCountdownId: UUID?
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     /// Sapphire's expansion curve: noticeable overshoot, quick settle.
@@ -94,6 +96,12 @@ struct NotchView: View {
         .onReceive(timer) { now = $0 }
         .onChange(of: calendarService.selectedDate) { newDate in
             reminderService.load(for: newDate)
+        }
+        .onChange(of: focusedCountdownId) { focused in
+            if focused == nil { editingCountdownId = nil }
+        }
+        .onChange(of: layout.expanded) { expanded in
+            if !expanded { editingCountdownId = nil }
         }
     }
 
@@ -614,6 +622,14 @@ struct NotchView: View {
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
     }
 
+    /// Live-saving title binding for inline editing in the dashboard card.
+    private func countdownTitleBinding(_ countdown: Countdown) -> Binding<String> {
+        Binding(
+            get: { countdowns.countdowns.first(where: { $0.id == countdown.id })?.title ?? "" },
+            set: { newValue in countdowns.update(id: countdown.id) { $0.title = newValue } }
+        )
+    }
+
     private func countdownRow(_ countdown: Countdown, highlight: Bool) -> some View {
         let days = countdowns.daysRemaining(for: countdown)
         let isPast = days < 0
@@ -636,10 +652,23 @@ struct NotchView: View {
             }
             .frame(width: 56, alignment: .trailing)
             Rectangle().fill(Color.white.opacity(0.08)).frame(width: 0.5, height: 28)
-            Text(countdown.title)
-                .font(.system(size: 12))
-                .foregroundStyle(isPast ? Color.white.opacity(0.5) : Color.white)
-                .lineLimit(1)
+            if editingCountdownId == countdown.id {
+                TextField("", text: countdownTitleBinding(countdown))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white)
+                    .focused($focusedCountdownId, equals: countdown.id)
+                    .onSubmit { editingCountdownId = nil }
+            } else {
+                Text(countdown.title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(isPast ? Color.white.opacity(0.5) : Color.white)
+                    .lineLimit(1)
+                    .onTapGesture(count: 2) {
+                        editingCountdownId = countdown.id
+                        DispatchQueue.main.async { focusedCountdownId = countdown.id }
+                    }
+            }
             Spacer(minLength: 0)
         }
         .frame(height: 38)
