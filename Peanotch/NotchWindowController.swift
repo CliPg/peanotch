@@ -284,14 +284,22 @@ final class NotchWindowController {
         collapse()
     }
 
-    /// The big canvas intercepts clicks only over the live surface.
+    /// The big canvas intercepts clicks only over the VISIBLE surface (the
+    /// calendar frame in calendar mode, the dashboard frame otherwise) —
+    /// clicks over transparent canvas regions always pass through.
     private func updateMouseEventHandling() {
-        let surface = isExpanded ? activeSurfaceFrame : compactFrame
+        let surface = isExpanded ? visibleSurfaceFrame : compactFrame
         let accepts = surface.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
         if panel.ignoresMouseEvents == accepts {
             panel.ignoresMouseEvents = !accepts
             Diagnostics.record("canvas events -> \(accepts ? "accepting (over surface)" : "passthrough"), at \(NSEvent.mouseLocation)")
         }
+    }
+
+    /// Follows the visible surface for event gating (see above), while
+    /// stay/collapse checks elsewhere use the union of dashboard + calendar.
+    private var visibleSurfaceFrame: NSRect {
+        layout.calendarMode ? calendarFrame : expandedFrame
     }
 
     private func toggleExpansion() {
