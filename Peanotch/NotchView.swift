@@ -288,8 +288,12 @@ struct NotchView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
                     Image(systemName: batterySymbol)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(battery.charging ? Color.green : Color.white.opacity(0.85))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(battery.charging ? Color.green : Color.white.opacity(0.5))
+                    Text(L10n.t("电池", "Battery"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                    Spacer(minLength: 2)
                     Text(battery.level.map { "\($0)%" } ?? "--")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .monospacedDigit()
