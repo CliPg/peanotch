@@ -89,19 +89,11 @@ struct NotchView: View {
                 }
             }
             if layout.expanded {
-                if layout.calendarMode {
-                    fullCalendarSection
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
-                        .padding(.bottom, 14)
-                        .transition(.opacity)
-                } else {
-                    expandedCards
-                        .padding(.horizontal, 14)
-                        .padding(.top, 10)
-                        .padding(.bottom, 16)
-                        .transition(.opacity)
-                }
+                expandedCards
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
             }
         }
         .clipped()
@@ -114,6 +106,20 @@ struct NotchView: View {
             .ignoresSafeArea()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay {
+            if layout.calendarMode {
+                fullCalendarSection
+                    .padding(14)
+                    .frame(width: layout.calendarWidth, height: layout.calendarHeight)
+                    .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.black))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.45), radius: 24, y: 8)
+                    .transition(.scale(scale: 0.97).combined(with: .opacity))
+            }
+        }
         .animation(Self.expansionAnimation, value: layout.expanded)
         .animation(Self.expansionAnimation, value: layout.calendarMode)
         .onReceive(timer) { now = $0 }
@@ -187,13 +193,11 @@ struct NotchView: View {
     private var bandOpacity: Double { layout.expanded ? 0 : 1 }
 
     private var surfaceWidth: CGFloat {
-        if !layout.expanded { return layout.compactWidth }
-        return layout.calendarMode ? layout.calendarWidth : layout.expandedWidth
+        layout.expanded ? layout.expandedWidth : layout.compactWidth
     }
 
     private var surfaceHeight: CGFloat {
-        if !layout.expanded { return layout.compactHeight }
-        return layout.calendarMode ? layout.calendarHeight : layout.expandedHeight
+        layout.expanded ? layout.expandedHeight : layout.compactHeight
     }
 
     // MARK: - Full calendar (in-notch)

@@ -228,8 +228,11 @@ final class NotchWindowController {
         activeSurfaceFrame.insetBy(dx: -6, dy: -10)
     }
 
+    /// Dashboard stays as-is; the floating calendar extends below it, so the
+    /// interactive region is the union — the click that opened the calendar
+    /// is always inside it (that's what caused the instant collapse).
     private var activeSurfaceFrame: NSRect {
-        layout.calendarMode ? calendarFrame : expandedFrame
+        layout.calendarMode ? expandedFrame.union(calendarFrame) : expandedFrame
     }
 
     private func installHoverProbe() {
@@ -330,6 +333,10 @@ final class NotchWindowController {
 
     private func setCalendarMode(_ on: Bool) {
         guard isExpanded else { return }
+        if on {
+            collapseCheck?.invalidate()
+            collapseCheck = nil
+        }
         layout.calendarMode = on
         panel.makeFirstResponder(nil)
     }
