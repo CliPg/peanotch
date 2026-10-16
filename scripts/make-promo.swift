@@ -230,18 +230,34 @@ struct PromoScreen: View {
         .shadow(color: .black.opacity(0.16), radius: 40, y: 26)
     }
 
+    private func beam(_ color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 220, style: .continuous)
+            .fill(LinearGradient(colors: [color.opacity(0), color.opacity(0.5), color.opacity(0)],
+                                  startPoint: .top, endPoint: .bottom))
+            .frame(width: 230, height: 1500)
+            .rotationEffect(.degrees(32))
+            .blur(radius: 55)
+    }
+
     private var display: some View {
         ZStack(alignment: .top) {
-            // wallpaper
+            // wallpaper — deep blue-purple with diagonal aurora beams
+            // (styled after the user's Sequoia-dark wallpaper; no apps, no
+            // status items — only Peanotch itself on screen)
             ZStack {
-                LinearGradient(colors: [Color(red: 0.98, green: 0.44, blue: 0.36),
-                                        Color(red: 0.94, green: 0.63, blue: 0.44),
-                                        Color(red: 0.22, green: 0.32, blue: 0.55)],
+                LinearGradient(colors: [Color(red: 0.17, green: 0.09, blue: 0.40),
+                                        Color(red: 0.24, green: 0.13, blue: 0.52),
+                                        Color(red: 0.10, green: 0.05, blue: 0.28)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
-                Circle().fill(Color.purple.opacity(0.4)).blur(radius: 120).frame(width: 600).offset(x: 340, y: 320)
-                Circle().fill(Color.orange.opacity(0.35)).blur(radius: 130).frame(width: 520).offset(x: -420, y: 420)
-                Circle().fill(Color.blue.opacity(0.3)).blur(radius: 130).frame(width: 480).offset(x: 120, y: 640)
+                beam(Color(red: 0.50, green: 0.88, blue: 0.75)).offset(x: -430, y: -60)
+                beam(Color(red: 0.31, green: 0.66, blue: 0.94)).offset(x: -80, y: 120)
+                beam(Color(red: 0.69, green: 0.56, blue: 0.94)).offset(x: 300, y: 60)
+                beam(Color(red: 0.43, green: 0.78, blue: 0.85)).offset(x: 620, y: 280)
             }
+            // beams are taller than the display; pin the wallpaper to the
+            // screen size so they can't inflate layout and push the dashboard
+            // out of the clipped area (visual overflow only)
+            .frame(width: 1560, height: 980)
 
             // dashboard hanging from the notch
             PromoDashboard().offset(y: 8)
