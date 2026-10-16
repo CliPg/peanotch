@@ -71,7 +71,7 @@ struct NotchView: View {
             .contentShape(Rectangle())
             .onTapGesture { onBandTap() }
             .overlay(alignment: .topLeading) {
-                if layout.expanded && !layout.calendarMode {
+                if layout.expanded && !layout.calendarMode && !layout.countdownMode {
                     Button(action: onOpenSettings) {
                         Image(systemName: "gearshape")
                             .font(.system(size: 13))
@@ -125,6 +125,7 @@ struct NotchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(Self.expansionAnimation, value: layout.expanded)
         .animation(Self.expansionAnimation, value: layout.calendarMode)
+        .animation(Self.expansionAnimation, value: layout.countdownMode)
         .onReceive(timer) { now = $0 }
         .onChange(of: calendarService.selectedDate) { newDate in
             reminderService.load(for: newDate)
