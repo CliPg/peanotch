@@ -316,47 +316,48 @@ struct NotchView: View {
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
     }
 
-    // MARK: AirPods levels (left/right split, green when charged)
+    // MARK: AirPods battery (single row + bar)
 
     @ViewBuilder
     private var airPodsRows: some View {
         if let device = airPods.device {
-            VStack(alignment: .leading, spacing: 3) {
-                if let left = device.left {
-                    airPodsLevelRow(label: L10n.t("左耳", "Left"), level: left)
+            let level = device.left.flatMap { left in device.right.map { min(left, $0) } }
+                ?? device.left ?? device.right ?? device.single
+            if let level {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "airpodspro")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.white.opacity(0.5))
+                        Text("AirPods")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.white.opacity(0.55))
+                        Spacer(minLength: 2)
+                        Text("\(level)%")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white)
+                    }
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.15))
+                            Capsule()
+                                .fill(Self.batteryLevelColor(level))
+                                .frame(width: proxy.size.width * Double(level) / 100)
+                        }
+                    }
+                    .frame(height: 4)
                 }
-                if let right = device.right {
-                    airPodsLevelRow(label: L10n.t("右耳", "Right"), level: right)
-                }
-                if device.left == nil && device.right == nil, let single = device.single {
-                    airPodsLevelRow(label: L10n.t("耳机", "Buds"), level: single)
-                }
+                .padding(.bottom, 5)
             }
-            .padding(.bottom, 5)
         }
     }
 
-    private func airPodsLevelRow(label: String, level: Int) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: "airpodspro")
-                .font(.system(size: 10))
-                .foregroundStyle(Color.white.opacity(0.5))
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.white.opacity(0.55))
-            Spacer(minLength: 2)
-            Text("\(level)%")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(Self.deviceBatteryColor(level))
-        }
-    }
-
-    /// High charge reads green (>= 50%), critically low reads red.
-    private static func deviceBatteryColor(_ level: Int) -> Color {
-        if level >= 50 { return Color.green }
+    /// Low charge warns: white normally, amber <= 25%, red <= 15%.
+    private static func batteryLevelColor(_ level: Int) -> Color {
         if level <= 15 { return Color(red: 1.0, green: 0.42, blue: 0.24) }
-        return Color.white
+        if level <= 25 { return Color(red: 0.96, green: 0.78, blue: 0.29) }
+        return Color.white.opacity(0.85)
     }
 
     private var weatherCard: some View {
