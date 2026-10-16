@@ -28,6 +28,8 @@ struct NotchView: View {
     @State private var lastMonthDirection = 1
     @State private var calendarDayCounts: [Int: Int] = [:]
     @State private var calendarNewReminderTitle = ""
+    @State private var countdownNewTitle = ""
+    @State private var countdownNewDate = Date()
     @State private var editingCountdownId: UUID?
     @FocusState private var focusedCountdownId: UUID?
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -78,7 +80,7 @@ struct NotchView: View {
                     .buttonStyle(.plain)
                     .padding(.leading, 10)
                     .padding(.top, 9)
-                } else if layout.expanded && layout.calendarMode {
+                } else if layout.expanded && (layout.calendarMode || layout.countdownMode) {
                     Button(action: onCloseCalendar) {
                         Image(systemName: "chevron.left.circle.fill")
                             .font(.system(size: 15))
@@ -92,6 +94,12 @@ struct NotchView: View {
             if layout.expanded {
                 if layout.calendarMode {
                     fullCalendarSection
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 14)
+                        .transition(.opacity)
+                } else if layout.countdownMode {
+                    fullCountdownSection
                         .padding(.horizontal, 16)
                         .padding(.top, 4)
                         .padding(.bottom, 14)
@@ -194,12 +202,161 @@ struct NotchView: View {
 
     private var surfaceWidth: CGFloat {
         if !layout.expanded { return layout.compactWidth }
-        return layout.calendarMode ? layout.calendarWidth : layout.expandedWidth
+        return (layout.calendarMode || layout.countdownMode) ? layout.calendarWidth : layout.expandedWidth
     }
 
     private var surfaceHeight: CGFloat {
         if !layout.expanded { return layout.compactHeight }
-        return layout.calendarMode ? layout.calendarHeight : layout.expandedHeight
+        return (layout.calendarMode || layout.countdownMode) ? layout.calendarHeight : layout.expandedHeight
+    }
+
+    // MARK: - Full countdown manager (in-notch)
+
+    private var fullCountdownSection: some View {
+        VStack(spacing: 10) {
+            fullCountdownHeader
+            ScrollView {
+                VStack(spacing: 8) {
+                    if countdowns.countdowns.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "calendar.badge.clock")
+                                .font(.system(size: 26))
+                                .foregroundStyle(Color.white.opacity(0.35))
+                            Text(L10n.t("还没有重要日子", "No important days yet"))
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.white.opacity(0.5))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 30)
+                    } else {
+                        ForEach(countdowns.sortedUpcoming) { countdown in
+                            fullCountdownCard(countdown)
+                        }
+                    }
+                }
+            }
+            countdownComposer
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var fullCountdownHeader: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.t("重要日子", "Important Days"))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.white)
+                Text(countdownSummary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.white.opacity(0.45))
+            }
+            Spacer()
+        }
+    }
+
+    private var countdownSummary: String {
+        let count = countdowns.countdowns.count
+        guard count > 0 else { return L10n.t("记录值得期待的日子", "Days worth looking forward to") }
+        if let nearest = countdowns.sortedUpcoming.first(where: { countdowns.daysRemaining(for: $0) >= 0 }) {
+            let days = countdowns.daysRemaining(for: nearest)
+            return L10n.t("\(count) 个日子 · 最近还有 \(days) 天", "\(count) days · next in \(days) days")
+        }
+        return L10n.t("\(count) 个日子", "\(count) days")
+    }
+
+    private func fullCountdownCard(_ countdown: Countdown) -> some View {
+        let days = countdowns.daysRemaining(for: countdown)
+        let isPast = days < 0
+        let nearestId = countdowns.sortedUpcoming.first { countdowns.daysRemaining(for: $0) >= 0 }?.id
+        let isNearest = countdown.id == nearestId
+        let accent = Color(red: 1.00, green: 0.72, blue: 0.30)
+
+        return HStack(spacing: 12) {
+            VStack(spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text("\(abs(days))")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(isPast ? Color.white.opacity(0.4)
+                                         : (isNearest ? accent : Color.white))
+                    Text(L10n.t("天", "d"))
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+                Text(isPast ? L10n.t("已过", "ago") : L10n.t("还剩", "left"))
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
+            .frame(width: 58)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 0.5, height: 30)
+
+            TextField(L10n.t("名称", "Title"), text: countdownTitleBinding(countdown))
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white)
+
+            DatePicker("", selection: countdownDateBinding(countdown), displayedComponents: .date)
+                .labelsHidden()
+                .font(.system(size: 10))
+
+            Button {
+                countdowns.remove(countdown)
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isNearest ? accent.opacity(0.09) : Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isNearest ? accent.opacity(0.45) : Color.clear, lineWidth: 1)
+        )
+    }
+
+    private func countdownDateBinding(_ countdown: Countdown) -> Binding<Date> {
+        Binding(
+            get: { countdowns.countdowns.first(where: { $0.id == countdown.id })?.date ?? Date() },
+            set: { newValue in countdowns.update(id: countdown.id) { $0.date = newValue } }
+        )
+    }
+
+    private var countdownComposer: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.45))
+            TextField(L10n.t("名称（如：生日、考试）", "Name (e.g. Birthday, Exam)"), text: $countdownNewTitle)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white)
+                .onSubmit(addFullCountdown)
+            DatePicker("", selection: $countdownNewDate, displayedComponents: .date)
+                .labelsHidden()
+                .font(.system(size: 10))
+            Button(L10n.t("添加", "Add"), action: addFullCountdown)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    private func addFullCountdown() {
+        let trimmed = countdownNewTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        countdowns.add(title: trimmed, date: countdownNewDate)
+        countdownNewTitle = ""
     }
 
     // MARK: - Full calendar (in-notch)

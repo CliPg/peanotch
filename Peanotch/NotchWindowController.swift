@@ -5,6 +5,7 @@ import SwiftUI
 final class NotchLayoutState: ObservableObject {
     @Published var expanded = false
     @Published var calendarMode = false
+    @Published var countdownMode = false
     /// +1 / -1 pulse from trackpad swipes; consumed by the calendar view.
     @Published var monthShift = 0
     @Published var calendarWidth: CGFloat = 480
@@ -36,7 +37,6 @@ final class NotchWindowController {
     private var refreshTimer: Timer?
     private let systemStats = SystemStatsService()
     private let airPods = AirPodsBatteryService()
-    private var editorWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var hoverProbe: NSPanel?
     private var pollTimer: Timer?
@@ -71,7 +71,7 @@ final class NotchWindowController {
         let hostingView = ResignOnBackgroundHostingView(rootView: NotchView(onBandTap: { [weak self] in
             self?.toggleExpansion()
         }, onEditCountdowns: { [weak self] in
-            self?.showCountdownEditor()
+            self?.enterCountdownMode()
         }, onOpenSettings: { [weak self] in
             self?.showSettingsWindow()
         }, onOpenCalendar: { [weak self] in
@@ -240,7 +240,7 @@ final class NotchWindowController {
         eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: downs) { [weak self] event in
             if let window = event.window,
                let self,
-               window === self.panel || window === self.editorWindow || window === self.settingsWindow {
+               window === self.panel || window === self.settingsWindow {
                 self.resignFieldEditorIfClickedOutside(event, in: window)
             }
             self?.handleMouseDown()
@@ -271,7 +271,9 @@ final class NotchWindowController {
     /// interactive region is the union — the click that opened the calendar
     /// is always inside it (that's what caused the instant collapse).
     private var activeSurfaceFrame: NSRect {
-        layout.calendarMode ? expandedFrame.union(calendarFrame) : expandedFrame
+        (layout.calendarMode || layout.countdownMode)
+            ? expandedFrame.union(calendarFrame)
+            : expandedFrame
     }
 
     private func installHoverProbe() {
@@ -338,7 +340,7 @@ final class NotchWindowController {
     /// Follows the visible surface for event gating (see above), while
     /// stay/collapse checks elsewhere use the union of dashboard + calendar.
     private var visibleSurfaceFrame: NSRect {
-        layout.calendarMode ? calendarFrame : expandedFrame
+        (layout.calendarMode || layout.countdownMode) ? calendarFrame : expandedFrame
     }
 
     private func toggleExpansion() {
@@ -375,16 +377,28 @@ final class NotchWindowController {
         isExpanded = false
         layout.expanded = false
         layout.calendarMode = false
+        layout.countdownMode = false
         panel.makeFirstResponder(nil)
     }
 
     private func setCalendarMode(_ on: Bool) {
+        setSurfaceMode(calendar: on)
+    }
+
+    private func enterCountdownMode() {
+        setSurfaceMode(countdown: true)
+    }
+
+    /// Exactly one detail mode at a time; entering one cancels pending
+    /// hover-collapse so the surface doesn't snap shut underneath it.
+    private func setSurfaceMode(calendar: Bool = false, countdown: Bool = false) {
         guard isExpanded else { return }
-        if on {
+        if calendar || countdown {
             collapseCheck?.invalidate()
             collapseCheck = nil
         }
-        layout.calendarMode = on
+        layout.calendarMode = calendar
+        layout.countdownMode = countdown
         panel.makeFirstResponder(nil)
     }
 
@@ -425,17 +439,6 @@ final class NotchWindowController {
         return window
     }
 
-    private func showCountdownEditor() {
-        editorWindow = presentUtilityWindow(existing: editorWindow,
-                                            title: L10n.t("倒计时设置", "Countdowns"),
-                                            size: NSSize(width: 420, height: 460)) { [weak self] window in
-            NSHostingView(rootView: CountdownEditorView(service: self?.countdownService ?? CountdownService(),
-                                                        onDone: { [weak window] in
-                                                            window?.orderOut(nil)
-                                                        }))
-        }
-    }
-
     private func showSettingsWindow() {
         settingsWindow = presentUtilityWindow(existing: settingsWindow,
                                               title: L10n.t("设置", "Settings"),
@@ -445,7 +448,8 @@ final class NotchWindowController {
                                                      window?.orderOut(nil)
                                                  },
                                                  onOpenCountdowns: { [weak self] in
-                                                     self?.showCountdownEditor()
+                                                     self?.expand()
+                                                     self?.enterCountdownMode()
                                                  }))
         }
     }
