@@ -1,11 +1,11 @@
 import Combine
+import CoreBluetooth
 import Foundation
 
-/// AirPods battery (left / right / case) parsed from the system Bluetooth
-/// preference plist — the same source Sapphire reads. Works without any
-/// Bluetooth permission prompt; values are fresh while the AirPods are
-/// connected to this Mac.
-final class AirPodsBatteryService: ObservableObject {
+/// AirPods battery via CoreBluetooth (Sapphire's primary route): discover the
+/// AirPods BLE peripheral, connect, and read the standard Battery service
+/// (0x180F / 0x2A19). Requires Bluetooth permission on first use.
+final class AirPodsBatteryService: NSObject, ObservableObject {
     struct AirPods: Equatable {
         var name: String
         var left: Int?
@@ -16,54 +16,90 @@ final class AirPodsBatteryService: ObservableObject {
 
     @Published var device: AirPods?
 
-    private static let plistPath = "/Library/Preferences/com.apple.Bluetooth.plist"
-    private var timer: Timer?
+    private static let batteryServiceUUID = CBUUID(string: "180F")
+    private static let batteryLevelUUID = CBUUID(string: "2A19")
+
+    private var manager: CBCentralManager?
+    private var tracked: [(peripheral: CBPeripheral, name: String)] = []
+    private var rescanTimer: Timer?
 
     func start() {
-        refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.refresh()
+        let manager = CBCentralManager(delegate: self, queue: nil,
+                                       options: [CBCentralManagerOptionShowPowerAlertKey: false])
+        self.manager = manager
+        rescanTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            guard let self, let manager = self.manager, manager.state == .poweredOn else { return }
+            manager.scanForPeripherals(withServices: [Self.batteryServiceUUID],
+                                       options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         }
     }
+}
 
-    private func refresh() {
-        let next = parse()
-        DispatchQueue.main.async {
-            if self.device != next {
-                self.device = next
+extension AirPodsBatteryService: CBCentralManagerDelegate {
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        guard central.state == .poweredOn else {
+            if central.state == .unauthorized {
+                Diagnostics.record("airpods: bluetooth permission denied")
             }
+            return
         }
+        central.scanForPeripherals(withServices: [Self.batteryServiceUUID],
+                                   options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
     }
 
-    private func parse() -> AirPods? {
-        guard let data = FileManager.default.contents(atPath: Self.plistPath),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let cache = plist["DeviceCache"] as? [String: [String: Any]] else {
-            return nil
+    func centralManager(_ central: CBCentralManager,
+                        didDiscover peripheral: CBPeripheral,
+                        advertisementData: [String: Any],
+                        rssi RSSI: NSNumber) {
+        let name = peripheral.name
+            ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
+            ?? ""
+        // AirPods / AirPods Pro / AirPods Max all carry "AirPods" in the name;
+        // Beats siblings report a plain battery service too and are welcome.
+        let isAirPods = name.localizedCaseInsensitiveContains("AirPods")
+        let hasBatteryService = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID])?
+            .contains(Self.batteryServiceUUID) == true
+        guard !name.isEmpty, isAirPods || hasBatteryService else { return }
+
+        if !tracked.contains(where: { $0.peripheral.identifier == peripheral.identifier }) {
+            tracked.append((peripheral, name.isEmpty ? "AirPods" : name))
         }
-
-        for (_, info) in cache {
-            let name = info["Name"] as? String ?? ""
-            let left = intValue(info["BatteryPercentLeft"])
-            let right = intValue(info["BatteryPercentRight"])
-            let caseBattery = intValue(info["BatteryPercentCase"])
-            let single = intValue(info["BatteryPercentSingle"]) ?? intValue(info["BatteryPercent"])
-
-            let looksLikeAirPods = name.localizedCaseInsensitiveContains("AirPods")
-                || left != nil || right != nil || caseBattery != nil
-            guard looksLikeAirPods, left != nil || right != nil || single != nil else { continue }
-
-            return AirPods(name: name.isEmpty ? "AirPods" : name,
-                           left: left, right: right,
-                           caseBattery: caseBattery, single: single)
-        }
-        return nil
+        central.stopScan()
+        central.connect(peripheral, options: nil)
     }
 
-    /// Plist numbers may surface as NSNumber or String.
-    private func intValue(_ any: Any?) -> Int? {
-        if let number = any as? NSNumber { return number.intValue }
-        if let string = any as? String { return Int(string) }
-        return nil
+    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        peripheral.delegate = self
+        peripheral.discoverServices([Self.batteryServiceUUID])
+    }
+
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        // Reconnect next rescan cycle.
+    }
+}
+
+extension AirPodsBatteryService: CBPeripheralDelegate {
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        guard error == nil,
+              let service = peripheral.services?.first(where: { $0.uuid == Self.batteryServiceUUID }) else { return }
+        peripheral.discoverCharacteristics([Self.batteryLevelUUID], for: service)
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        guard error == nil,
+              let characteristic = service.characteristics?.first(where: { $0.uuid == Self.batteryLevelUUID }) else { return }
+        peripheral.readValue(for: characteristic)
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard error == nil,
+              characteristic.uuid == Self.batteryLevelUUID,
+              let data = characteristic.value, let first = data.first else { return }
+        let level = Int(first)
+        let name = tracked.first(where: { $0.peripheral.identifier == peripheral.identifier })?.name ?? "AirPods"
+        DispatchQueue.main.async {
+            self.device = AirPods(name: name, left: nil, right: nil, caseBattery: nil, single: level)
+            Diagnostics.record("airpods battery: \(name) \(level)%")
+        }
     }
 }

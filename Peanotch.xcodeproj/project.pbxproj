@@ -233,6 +233,7 @@
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Peanotch 在刘海展开视图中显示你今天的日历事件。";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Peanotch 在刘海展开视图中显示你当天的提醒事项（待办）。";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Peanotch 使用你的位置获取当地天气。";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Peanotch 在系统卡片中显示 AirPods 的电量。";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -262,6 +263,7 @@
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Peanotch 在刘海展开视图中显示你今天的日历事件。";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Peanotch 在刘海展开视图中显示你当天的提醒事项（待办）。";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Peanotch 使用你的位置获取当地天气。";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Peanotch 在系统卡片中显示 AirPods 的电量。";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
