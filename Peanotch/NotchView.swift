@@ -25,6 +25,7 @@ struct NotchView: View {
     @State private var now = Date()
     @State private var newReminderTitle = ""
     @State private var calendarMonthAnchor = Calendar.current.startOfDay(for: Date())
+    @State private var lastMonthDirection = 1
     @State private var calendarDayCounts: [Int: Int] = [:]
     @State private var calendarNewReminderTitle = ""
     @State private var editingCountdownId: UUID?
@@ -209,7 +210,12 @@ struct NotchView: View {
         VStack(spacing: 8) {
             calendarNav
             calendarWeekdayRow
-            calendarGrid
+            ZStack {
+                calendarGrid
+                    .id(calendarMonthAnchor)
+                    .transition(monthSlideTransition)
+            }
+            .clipped()
             Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
             calendarSchedule
             calendarComposer
@@ -226,10 +232,20 @@ struct NotchView: View {
 
     private func calendarShiftMonth(_ delta: Int) {
         if let shifted = calendarCalculator.date(byAdding: .month, value: delta, to: calendarMonthAnchor) {
-            calendarMonthAnchor = calendarCalculator.startOfDay(for: shifted)
+            lastMonthDirection = delta
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                calendarMonthAnchor = calendarCalculator.startOfDay(for: shifted)
+            }
             loadCalendarMarkers()
             Diagnostics.record("calendar: month shift \(delta) -> \(calendarMonthAnchor)")
         }
+    }
+
+    /// Next month slides in from the trailing edge; previous from the leading.
+    private var monthSlideTransition: AnyTransition {
+        lastMonthDirection > 0
+            ? .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
+            : .asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing))
     }
 
     private var calendarNav: some View {
@@ -245,6 +261,8 @@ struct NotchView: View {
             Text(calendarMonthTitle)
                 .font(.system(size: 13, weight: .bold))
                 .frame(width: 120)
+                .id(calendarMonthAnchor)
+                .transition(.opacity)
             Button { calendarShiftMonth(1) } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .medium))
