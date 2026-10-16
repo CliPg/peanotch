@@ -200,12 +200,6 @@ struct NotchView: View {
                     label: L10n.t("网络", "Network"),
                     value: "↓\(Self.speed(snapshot.netDownBytesPerSec)) ↑\(Self.speed(snapshot.netUpBytesPerSec))",
                     fraction: nil)
-            if let airPodsDevice = airPods.device {
-                statRow(icon: "airpodspro",
-                        label: airPodsDevice.name,
-                        value: Self.airPodsValue(airPodsDevice),
-                        fraction: Self.airPodsFraction(airPodsDevice))
-            }
             if snapshot.batteryHealthPercent > 0 {
                 statRow(icon: "bolt.batteryblock",
                         label: L10n.t("电池健康", "Battery Health"),
@@ -266,24 +260,6 @@ struct NotchView: View {
         return Color.white.opacity(0.85)
     }
 
-    /// "88·85·70" (left·right·case) or a single percentage.
-    private static func airPodsValue(_ device: AirPodsBatteryService.AirPods) -> String {
-        var parts: [String] = []
-        if let left = device.left { parts.append("\(left)") }
-        if let right = device.right { parts.append("\(right)") }
-        if let caseBattery = device.caseBattery { parts.append("\(caseBattery)") }
-        if parts.isEmpty, let single = device.single { parts.append("\(single)%") }
-        return parts.joined(separator: "·")
-    }
-
-    private static func airPodsFraction(_ device: AirPodsBatteryService.AirPods) -> Double {
-        let levels = [device.left, device.right, device.caseBattery].compactMap { $0 }
-        guard !levels.isEmpty else {
-            return Double(device.single ?? 0) / 100
-        }
-        return Double(levels.min() ?? 0) / 100
-    }
-
     private static func speed(_ bytesPerSec: Int64) -> String {
         let bytes = Double(bytesPerSec)
         if bytes >= 1_000_000 { return String(format: "%.1fM", bytes / 1_000_000) }
@@ -308,6 +284,7 @@ struct NotchView: View {
                     .foregroundStyle(Color.white.opacity(0.6))
             }
             Spacer(minLength: 6)
+            airPodsRows
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
                     Image(systemName: batterySymbol)
@@ -337,6 +314,49 @@ struct NotchView: View {
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    // MARK: AirPods levels (left/right split, green when charged)
+
+    @ViewBuilder
+    private var airPodsRows: some View {
+        if let device = airPods.device {
+            VStack(alignment: .leading, spacing: 3) {
+                if let left = device.left {
+                    airPodsLevelRow(label: L10n.t("左耳", "Left"), level: left)
+                }
+                if let right = device.right {
+                    airPodsLevelRow(label: L10n.t("右耳", "Right"), level: right)
+                }
+                if device.left == nil && device.right == nil, let single = device.single {
+                    airPodsLevelRow(label: L10n.t("耳机", "Buds"), level: single)
+                }
+            }
+            .padding(.bottom, 5)
+        }
+    }
+
+    private func airPodsLevelRow(label: String, level: Int) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "airpodspro")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.white.opacity(0.5))
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.55))
+            Spacer(minLength: 2)
+            Text("\(level)%")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Self.deviceBatteryColor(level))
+        }
+    }
+
+    /// High charge reads green (>= 50%), critically low reads red.
+    private static func deviceBatteryColor(_ level: Int) -> Color {
+        if level >= 50 { return Color.green }
+        if level <= 15 { return Color(red: 1.0, green: 0.42, blue: 0.24) }
+        return Color.white
     }
 
     private var weatherCard: some View {
