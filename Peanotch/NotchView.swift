@@ -233,7 +233,7 @@ struct NotchView: View {
     private func calendarShiftMonth(_ delta: Int) {
         if let shifted = calendarCalculator.date(byAdding: .month, value: delta, to: calendarMonthAnchor) {
             lastMonthDirection = delta
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+            withAnimation(.easeInOut(duration: 0.32)) {
                 calendarMonthAnchor = calendarCalculator.startOfDay(for: shifted)
             }
             loadCalendarMarkers()
@@ -241,11 +241,18 @@ struct NotchView: View {
         }
     }
 
-    /// Next month slides in from the trailing edge; previous from the leading.
+    /// Short-travel slide fused with a fade — full-width rigid slides read as
+    /// cheap, so content travels ~1/8 of the width while crossfading.
     private var monthSlideTransition: AnyTransition {
-        lastMonthDirection > 0
-            ? .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
-            : .asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing))
+        .asymmetric(
+            insertion: .slideFade(offset: lastMonthDirection > 0 ? 64 : -64),
+            removal: .slideFade(offset: lastMonthDirection > 0 ? -40 : 40))
+    }
+
+    private var monthTitleTransition: AnyTransition {
+        .asymmetric(
+            insertion: .slideFade(offset: lastMonthDirection > 0 ? 18 : -18),
+            removal: .slideFade(offset: lastMonthDirection > 0 ? -12 : 12))
     }
 
     private var calendarNav: some View {
@@ -262,7 +269,7 @@ struct NotchView: View {
                 .font(.system(size: 13, weight: .bold))
                 .frame(width: 120)
                 .id(calendarMonthAnchor)
-                .transition(.opacity)
+                .transition(monthTitleTransition)
             Button { calendarShiftMonth(1) } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .medium))
@@ -1039,6 +1046,23 @@ extension WeatherService.LoadState {
         case .denied: return L10n.t("未授权", "Denied")
         case .failed: return L10n.t("获取失败", "Failed")
         }
+    }
+}
+
+/// Offset + opacity pair used for the short-travel slide/fade transitions.
+private struct SlideFadeModifier: ViewModifier {
+    let offset: CGFloat
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        content.offset(x: offset).opacity(opacity)
+    }
+}
+
+extension AnyTransition {
+    static func slideFade(offset: CGFloat) -> AnyTransition {
+        .modifier(active: SlideFadeModifier(offset: offset, opacity: 0),
+                  identity: SlideFadeModifier(offset: 0, opacity: 1))
     }
 }
 
