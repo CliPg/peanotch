@@ -27,6 +27,19 @@ final class CalendarService: ObservableObject {
         }
     }
 
+    /// Day-number -> event count for the month starting at monthStart.
+    func eventDayCounts(monthStart: Date) -> [Int: Int] {
+        guard authorized == true else { return [:] }
+        let calendar = Calendar.current
+        guard let end = calendar.date(byAdding: .month, value: 1, to: monthStart) else { return [:] }
+        let predicate = store.predicateForEvents(withStart: monthStart, end: end, calendars: nil)
+        var counts: [Int: Int] = [:]
+        for event in store.events(matching: predicate) {
+            counts[calendar.component(.day, from: event.startDate), default: 0] += 1
+        }
+        return counts
+    }
+
     /// Re-fetches the selected day (periodic auto-refresh).
     func refresh() {
         if authorized == true {

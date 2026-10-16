@@ -9,6 +9,7 @@ struct NotchView: View {
     var onBandTap: () -> Void = {}
     var onEditCountdowns: () -> Void = {}
     var onOpenSettings: () -> Void = {}
+    var onOpenCalendar: () -> Void = {}
 
     @EnvironmentObject var layout: NotchLayoutState
     @EnvironmentObject var settings: AppSettings
@@ -431,13 +432,19 @@ struct NotchView: View {
 
     private var calendarCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                sectionLabel(L10n.t("日历", "Calendar"))
-                Spacer()
-                Text(monthText)
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color.white.opacity(0.45))
+            Button(action: onOpenCalendar) {
+                HStack {
+                    sectionLabel(L10n.t("日历", "Calendar"))
+                    Spacer()
+                    Text(monthText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 8))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                }
             }
+            .buttonStyle(.plain)
             dayStrip
             if calendarService.authorized == true {
                 if scheduleItems.isEmpty {

@@ -32,6 +32,7 @@ final class NotchWindowController {
     private let airPods = AirPodsBatteryService()
     private var editorWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var calendarWindow: NSWindow?
     private var hoverProbe: NSPanel?
     private var pollTimer: Timer?
     private var collapseCheck: Timer?
@@ -68,6 +69,8 @@ final class NotchWindowController {
             self?.showCountdownEditor()
         }, onOpenSettings: { [weak self] in
             self?.showSettingsWindow()
+        }, onOpenCalendar: { [weak self] in
+            self?.showCalendarWindow()
         })
             .environmentObject(layout)
             .environmentObject(services.weather)
@@ -193,7 +196,8 @@ final class NotchWindowController {
         eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: downs) { [weak self] event in
             if let window = event.window,
                let self,
-               window === self.panel || window === self.editorWindow || window === self.settingsWindow {
+               window === self.panel || window === self.editorWindow || window === self.settingsWindow
+                || window === self.calendarWindow {
                 self.resignFieldEditorIfClickedOutside(event, in: window)
             }
             self?.handleMouseDown()
@@ -360,6 +364,18 @@ final class NotchWindowController {
                                                         onDone: { [weak window] in
                                                             window?.orderOut(nil)
                                                         }))
+        }
+    }
+
+    private func showCalendarWindow() {
+        calendarWindow = presentUtilityWindow(existing: calendarWindow,
+                                              title: L10n.t("日历", "Calendar"),
+                                              size: NSSize(width: 440, height: 700)) { [weak self] window in
+            NSHostingView(rootView: CalendarFullView(onDone: { [weak window] in
+                                                         window?.orderOut(nil)
+                                                     })
+                .environmentObject(self?.calendarService ?? CalendarService())
+                .environmentObject(self?.reminderService ?? ReminderService()))
         }
     }
 

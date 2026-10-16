@@ -28,6 +28,31 @@ final class ReminderService: ObservableObject {
         }
     }
 
+    /// Day-number -> incomplete-reminder count for the month (async).
+    func reminderDayCounts(monthStart: Date, completion: @escaping ([Int: Int]) -> Void) {
+        guard authorized == true else {
+            completion([:])
+            return
+        }
+        let calendar = Calendar.current
+        guard let end = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
+            completion([:])
+            return
+        }
+        let predicate = store.predicateForIncompleteReminders(withDueDateStarting: monthStart,
+                                                               ending: end,
+                                                               calendars: nil)
+        store.fetchReminders(matching: predicate) { reminders in
+            var counts: [Int: Int] = [:]
+            for reminder in reminders ?? [] {
+                if let due = reminder.dueDateComponents?.date {
+                    counts[calendar.component(.day, from: due), default: 0] += 1
+                }
+            }
+            DispatchQueue.main.async { completion(counts) }
+        }
+    }
+
     /// Re-fetches the current day (periodic auto-refresh).
     func refresh() {
         load(for: currentDay)
