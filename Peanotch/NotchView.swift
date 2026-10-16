@@ -10,6 +10,7 @@ struct NotchView: View {
     var onEditCountdowns: () -> Void = {}
     var onOpenSettings: () -> Void = {}
     var onOpenCalendar: () -> Void = {}
+    var onCloseCalendar: () -> Void = {}
 
     @EnvironmentObject var layout: NotchLayoutState
     @EnvironmentObject var settings: AppSettings
@@ -23,6 +24,9 @@ struct NotchView: View {
 
     @State private var now = Date()
     @State private var newReminderTitle = ""
+    @State private var calendarMonthAnchor = Calendar.current.startOfDay(for: Date())
+    @State private var calendarDayCounts: [Int: Int] = [:]
+    @State private var calendarNewReminderTitle = ""
     @State private var editingCountdownId: UUID?
     @FocusState private var focusedCountdownId: UUID?
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -64,7 +68,7 @@ struct NotchView: View {
             .contentShape(Rectangle())
             .onTapGesture { onBandTap() }
             .overlay(alignment: .topLeading) {
-                if layout.expanded {
+                if layout.expanded && !layout.calendarMode {
                     Button(action: onOpenSettings) {
                         Image(systemName: "gearshape")
                             .font(.system(size: 13))
@@ -73,19 +77,35 @@ struct NotchView: View {
                     .buttonStyle(.plain)
                     .padding(.leading, 10)
                     .padding(.top, 9)
+                } else if layout.expanded && layout.calendarMode {
+                    Button(action: onCloseCalendar) {
+                        Image(systemName: "chevron.left.circle.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.white.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 10)
+                    .padding(.top, 8)
                 }
             }
             if layout.expanded {
-                expandedCards
-                    .padding(.horizontal, 14)
-                    .padding(.top, 10)
-                    .padding(.bottom, 16)
-                    .transition(.opacity)
+                if layout.calendarMode {
+                    fullCalendarSection
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 14)
+                        .transition(.opacity)
+                } else {
+                    expandedCards
+                        .padding(.horizontal, 14)
+                        .padding(.top, 10)
+                        .padding(.bottom, 16)
+                        .transition(.opacity)
+                }
             }
         }
         .clipped()
-        .frame(width: layout.expanded ? layout.expandedWidth : layout.compactWidth,
-               height: layout.expanded ? layout.expandedHeight : layout.compactHeight)
+        .frame(width: surfaceWidth, height: surfaceHeight)
         .background(alignment: .top) {
             ZStack(alignment: .top) {
                 NotchPillShape(bottomRadius: layout.expanded ? 28 : 12).fill(Color.black)
@@ -95,6 +115,7 @@ struct NotchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(Self.expansionAnimation, value: layout.expanded)
+        .animation(Self.expansionAnimation, value: layout.calendarMode)
         .onReceive(timer) { now = $0 }
         .onChange(of: calendarService.selectedDate) { newDate in
             reminderService.load(for: newDate)
@@ -104,6 +125,9 @@ struct NotchView: View {
         }
         .onChange(of: layout.expanded) { expanded in
             if !expanded { editingCountdownId = nil }
+        }
+        .onChange(of: layout.calendarMode) { on in
+            if on { loadCalendarMarkers() }
         }
     }
 
@@ -161,6 +185,244 @@ struct NotchView: View {
 
     /// Wings vanish (crossfade) once the dashboard takes over the surface.
     private var bandOpacity: Double { layout.expanded ? 0 : 1 }
+
+    private var surfaceWidth: CGFloat {
+        if !layout.expanded { return layout.compactWidth }
+        return layout.calendarMode ? layout.calendarWidth : layout.expandedWidth
+    }
+
+    private var surfaceHeight: CGFloat {
+        if !layout.expanded { return layout.compactHeight }
+        return layout.calendarMode ? layout.calendarHeight : layout.expandedHeight
+    }
+
+    // MARK: - Full calendar (in-notch)
+
+    private var calendarCalculator: Calendar { Calendar.current }
+
+    private var fullCalendarSection: some View {
+        VStack(spacing: 8) {
+            calendarNav
+            calendarWeekdayRow
+            calendarGrid
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+            calendarSchedule
+            calendarComposer
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var calendarMonthTitle: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: isEnglish ? "en_US" : "zh_CN")
+        formatter.dateFormat = isEnglish ? "MMMM yyyy" : "yyyy年M月"
+        return formatter.string(from: calendarMonthAnchor)
+    }
+
+    private func calendarShiftMonth(_ delta: Int) {
+        if let shifted = calendarCalculator.date(byAdding: .month, value: delta, to: calendarMonthAnchor) {
+            calendarMonthAnchor = calendarCalculator.startOfDay(for: shifted)
+            loadCalendarMarkers()
+        }
+    }
+
+    private var calendarNav: some View {
+        HStack(spacing: 4) {
+            Button { calendarShiftMonth(-1) } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.55))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Text(calendarMonthTitle)
+                .font(.system(size: 13, weight: .bold))
+                .frame(width: 120)
+            Button { calendarShiftMonth(1) } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.55))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Text(Self.dayTitleFormatter.string(from: calendarService.selectedDate))
+                .font(.system(size: 10))
+                .foregroundStyle(Color.white.opacity(0.4))
+        }
+    }
+
+    private static let dayTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日 EEEE"
+        return formatter
+    }()
+
+    private var calendarWeekdayRow: some View {
+        let symbols = isEnglish ? ["S", "M", "T", "W", "T", "F", "S"] : ["日", "一", "二", "三", "四", "五", "六"]
+        return HStack(spacing: 3) {
+            ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
+                Text(symbol)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var calendarCells: [Date?] {
+        let calendar = calendarCalculator
+        let components = calendar.dateComponents([.year, .month], from: calendarMonthAnchor)
+        guard let first = calendar.date(from: components),
+              let range = calendar.range(of: .day, in: .month, for: first) else { return [] }
+        let firstWeekday = calendar.component(.weekday, from: first)
+        var cells: [Date?] = Array(repeating: nil, count: firstWeekday - 1)
+        for day in range {
+            cells.append(calendar.date(byAdding: .day, value: day - 1, to: first))
+        }
+        while cells.count % 7 != 0 { cells.append(nil) }
+        return cells
+    }
+
+    private var calendarGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 2) {
+            ForEach(Array(calendarCells.enumerated()), id: \.offset) { _, date in
+                if let date {
+                    calendarDayCell(date)
+                } else {
+                    Color.clear.frame(minHeight: 34)
+                }
+            }
+        }
+    }
+
+    private func calendarDayCell(_ date: Date) -> some View {
+        let calendar = calendarCalculator
+        let isToday = calendar.isDateInToday(date)
+        let isSelected = calendar.isDate(date, inSameDayAs: calendarService.selectedDate)
+        let hasItems = (calendarDayCounts[calendar.component(.day, from: date)] ?? 0) > 0
+        return Button(action: { calendarSelectDay(date) }) {
+            VStack(spacing: 2) {
+                Text("\(calendar.component(.day, from: date))")
+                    .font(.system(size: 12, weight: isSelected || isToday ? .semibold : .regular, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(isToday ? Color(red: 0.96, green: 0.78, blue: 0.29)
+                                             : (isSelected ? Color.white : Color.white.opacity(0.8)))
+                Circle()
+                    .fill(hasItems ? Color(red: 0.96, green: 0.78, blue: 0.29) : Color.clear)
+                    .frame(width: 3, height: 3)
+            }
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .background(Capsule().fill(isSelected ? Color.white.opacity(0.16) : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func calendarSelectDay(_ date: Date) {
+        calendarService.selectDay(date)
+        reminderService.load(for: date)
+    }
+
+    private func loadCalendarMarkers() {
+        let calendar = calendarCalculator
+        let components = calendar.dateComponents([.year, .month], from: calendarMonthAnchor)
+        guard let monthStart = calendar.date(from: components) else { return }
+        var counts = calendarService.eventDayCounts(monthStart: monthStart)
+        reminderService.reminderDayCounts(monthStart: monthStart) { reminderCounts in
+            for (day, count) in reminderCounts {
+                counts[day, default: 0] += count
+            }
+            self.calendarDayCounts = counts
+        }
+    }
+
+    private var calendarSchedule: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if scheduleItems.isEmpty {
+                Text(calendarCalculator.isDateInToday(calendarService.selectedDate)
+                     ? L10n.t("今天没有安排", "Nothing scheduled today")
+                     : L10n.t("这天没有安排", "Nothing scheduled"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .padding(.vertical, 2)
+            } else {
+                ForEach(scheduleItems) { item in
+                    HStack(spacing: 8) {
+                        if let reminder = item.reminder {
+                            Button {
+                                reminderService.toggleComplete(reminder)
+                            } label: {
+                                Image(systemName: "circle")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.white.opacity(0.55))
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Circle().fill(Color(red: 0.96, green: 0.78, blue: 0.29)).frame(width: 5, height: 5)
+                        }
+                        Group {
+                            if item.untimed {
+                                Text(item.reminder != nil ? L10n.t("待办", "To-do") : L10n.t("全天", "All-day"))
+                            } else if let time = item.time {
+                                Text(formattedTime(time))
+                            } else {
+                                Text("")
+                            }
+                        }
+                        .font(.system(size: 10, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.5))
+                        .frame(width: 40, alignment: .leading)
+                        Text(item.title)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(height: 22)
+                }
+            }
+        }
+    }
+
+    private var calendarComposer: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.45))
+            TextField(calendarComposerPlaceholder, text: $calendarNewReminderTitle)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white)
+                .onSubmit(createCalendarReminder)
+            Button(L10n.t("添加", "Add"), action: createCalendarReminder)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    private var calendarComposerPlaceholder: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: isEnglish ? "en_US" : "zh_CN")
+        formatter.dateFormat = isEnglish ? "MMM d" : "M月d日"
+        let day = formatter.string(from: calendarService.selectedDate)
+        return L10n.t("在\(day)新建提醒…", "New reminder on \(day)…")
+    }
+
+    private func createCalendarReminder() {
+        let trimmed = calendarNewReminderTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        reminderService.create(title: trimmed, for: calendarService.selectedDate)
+        calendarNewReminderTitle = ""
+        loadCalendarMarkers()
+    }
 
     // MARK: - Expanded dashboard
 

@@ -4,6 +4,9 @@ import SwiftUI
 /// Shared with the SwiftUI layer: the surface geometry + expansion state.
 final class NotchLayoutState: ObservableObject {
     @Published var expanded = false
+    @Published var calendarMode = false
+    @Published var calendarWidth: CGFloat = 480
+    @Published var calendarHeight: CGFloat = 560
     @Published var sideInset: CGFloat = 56
     @Published var compactWidth: CGFloat = 291
     @Published var compactHeight: CGFloat = 32
@@ -24,6 +27,7 @@ final class NotchWindowController {
     private var canvasFrame: NSRect = .zero
     private var compactFrame: NSRect = .zero   // surface rect on screen when compact
     private var expandedFrame: NSRect = .zero  // surface rect on screen when expanded
+    private var calendarFrame: NSRect = .zero   // surface rect on screen in calendar mode
     private let panel: NSPanel
     private let countdownService = CountdownService()
     private let reminderService = ReminderService()
@@ -32,7 +36,6 @@ final class NotchWindowController {
     private let airPods = AirPodsBatteryService()
     private var editorWindow: NSWindow?
     private var settingsWindow: NSWindow?
-    private var calendarWindow: NSWindow?
     private var hoverProbe: NSPanel?
     private var pollTimer: Timer?
     private var collapseCheck: Timer?
@@ -70,7 +73,9 @@ final class NotchWindowController {
         }, onOpenSettings: { [weak self] in
             self?.showSettingsWindow()
         }, onOpenCalendar: { [weak self] in
-            self?.showCalendarWindow()
+            self?.setCalendarMode(true)
+        }, onCloseCalendar: { [weak self] in
+            self?.setCalendarMode(false)
         })
             .environmentObject(layout)
             .environmentObject(services.weather)
@@ -175,7 +180,7 @@ final class NotchWindowController {
                                height: layout.expandedHeight)
 
         // Fixed canvas: full screen width, tall enough for the expanded surface.
-        let canvasHeight = max(layout.expandedHeight + 24, screen.frame.height * 0.42)
+        let canvasHeight = max(layout.expandedHeight + 24, layout.calendarHeight + 24, screen.frame.height * 0.42)
         canvasFrame = NSRect(x: screen.frame.minX,
                              y: screen.frame.maxY - canvasHeight,
                              width: screen.frame.width,
@@ -196,8 +201,7 @@ final class NotchWindowController {
         eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: downs) { [weak self] event in
             if let window = event.window,
                let self,
-               window === self.panel || window === self.editorWindow || window === self.settingsWindow
-                || window === self.calendarWindow {
+               window === self.panel || window === self.editorWindow || window === self.settingsWindow {
                 self.resignFieldEditorIfClickedOutside(event, in: window)
             }
             self?.handleMouseDown()
@@ -221,7 +225,11 @@ final class NotchWindowController {
     /// is position-driven (works while the cursor is in the menu bar); its
     /// hitTest returns nil so every click passes through untouched.
     private var probeFrame: NSRect {
-        expandedFrame.insetBy(dx: -6, dy: -10)
+        activeSurfaceFrame.insetBy(dx: -6, dy: -10)
+    }
+
+    private var activeSurfaceFrame: NSRect {
+        layout.calendarMode ? calendarFrame : expandedFrame
     }
 
     private func installHoverProbe() {
@@ -253,7 +261,7 @@ final class NotchWindowController {
         let location = NSEvent.mouseLocation
         if AppSettings.shared.openMode == "hover" {
             if isExpanded {
-                if expandedFrame.insetBy(dx: -6, dy: -6).contains(location) {
+                if activeSurfaceFrame.insetBy(dx: -6, dy: -6).contains(location) {
                     collapseCheck?.invalidate()
                     collapseCheck = nil
                 } else {
@@ -269,13 +277,13 @@ final class NotchWindowController {
     /// A click outside the expanded dashboard closes it (Sapphire's click mode).
     private func handleMouseDown() {
         guard isExpanded,
-              !expandedFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) else { return }
+              !activeSurfaceFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) else { return }
         collapse()
     }
 
     /// The big canvas intercepts clicks only over the live surface.
     private func updateMouseEventHandling() {
-        let surface = isExpanded ? expandedFrame : compactFrame
+        let surface = isExpanded ? activeSurfaceFrame : compactFrame
         let accepts = surface.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
         if panel.ignoresMouseEvents == accepts {
             panel.ignoresMouseEvents = !accepts
@@ -297,7 +305,7 @@ final class NotchWindowController {
         collapseCheck = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.collapseCheck = nil
-            if !self.expandedFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) {
+            if !self.activeSurfaceFrame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) {
                 self.collapse()
             }
         }
@@ -316,6 +324,13 @@ final class NotchWindowController {
         guard isExpanded else { return }
         isExpanded = false
         layout.expanded = false
+        layout.calendarMode = false
+        panel.makeFirstResponder(nil)
+    }
+
+    private func setCalendarMode(_ on: Bool) {
+        guard isExpanded else { return }
+        layout.calendarMode = on
         panel.makeFirstResponder(nil)
     }
 
@@ -364,18 +379,6 @@ final class NotchWindowController {
                                                         onDone: { [weak window] in
                                                             window?.orderOut(nil)
                                                         }))
-        }
-    }
-
-    private func showCalendarWindow() {
-        calendarWindow = presentUtilityWindow(existing: calendarWindow,
-                                              title: L10n.t("日历", "Calendar"),
-                                              size: NSSize(width: 440, height: 700)) { [weak self] window in
-            NSHostingView(rootView: CalendarFullView(onDone: { [weak window] in
-                                                         window?.orderOut(nil)
-                                                     })
-                .environmentObject(self?.calendarService ?? CalendarService())
-                .environmentObject(self?.reminderService ?? ReminderService()))
         }
     }
 
