@@ -64,7 +64,9 @@ final class ReminderService: ObservableObject {
         let calendar = Calendar.current
         let end = calendar.date(byAdding: .day, value: 1, to: day)!
         // For today, a nil start also picks up overdue incomplete reminders.
-        let start: Date? = calendar.isDateInToday(day) ? nil : day
+        // The predicate's start bound is EXCLUSIVE and date-only reminders are
+        // due exactly at midnight — start one second earlier so they match.
+        let start: Date? = calendar.isDateInToday(day) ? nil : day.addingTimeInterval(-1)
         let predicate = store.predicateForIncompleteReminders(withDueDateStarting: start,
                                                                ending: end,
                                                                calendars: nil)
@@ -77,7 +79,21 @@ final class ReminderService: ObservableObject {
                                 due: ek.dueDateComponents?.date,
                                 hasTime: ek.dueDateComponents?.hour != nil)
             }
-            DispatchQueue.main.async { self?.reminders = Array(items.prefix(3)) }
+            // Selected-day items first (newly created ones surface on top),
+            // overdue below (most recent first) — otherwise old overdue items
+            // crowd the cap and fresh reminders never appear.
+            let sorted = items.sorted { a, b in
+                let aOnDay = a.due.map { calendar.isDate($0, inSameDayAs: day) } ?? true
+                let bOnDay = b.due.map { calendar.isDate($0, inSameDayAs: day) } ?? true
+                if aOnDay != bOnDay { return aOnDay }
+                if aOnDay { return (a.due ?? .distantFuture) < (b.due ?? .distantFuture) }
+                return (a.due ?? .distantPast) > (b.due ?? .distantPast)
+            }
+            let shown = Array(sorted.prefix(4))
+            DispatchQueue.main.async {
+                self?.reminders = shown
+                Diagnostics.record("reminders: day \(day) fetched=\(items.count) shown=\(shown.count)")
+            }
         }
     }
 
