@@ -28,6 +28,11 @@ final class ReminderService: ObservableObject {
         }
     }
 
+    /// Re-fetches the current day (periodic auto-refresh).
+    func refresh() {
+        load(for: currentDay)
+    }
+
     func load(for date: Date) {
         let day = Calendar.current.startOfDay(for: date)
         currentDay = day

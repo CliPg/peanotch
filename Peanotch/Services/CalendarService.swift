@@ -27,6 +27,13 @@ final class CalendarService: ObservableObject {
         }
     }
 
+    /// Re-fetches the selected day (periodic auto-refresh).
+    func refresh() {
+        if authorized == true {
+            loadEvents(for: selectedDate)
+        }
+    }
+
     func selectDay(_ date: Date) {
         selectedDate = Calendar.current.startOfDay(for: date)
         if authorized == true {

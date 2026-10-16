@@ -27,6 +27,7 @@ final class NotchWindowController {
     private let panel: NSPanel
     private let countdownService = CountdownService()
     private let reminderService = ReminderService()
+    private var refreshTimer: Timer?
     private let systemStats = SystemStatsService()
     private let airPods = AirPodsBatteryService()
     private var editorWindow: NSWindow?
@@ -39,7 +40,15 @@ final class NotchWindowController {
     private var eventMonitors: [Any] = []
     private var screenObserver: NSObjectProtocol?
 
+    private var calendarService: CalendarService?
+
+    private func calendarServiceRefresh() {
+        calendarService?.refresh()
+        reminderService.refresh()
+    }
+
     init(services: (weather: WeatherService, calendar: CalendarService, battery: BatteryService)) {
+        calendarService = services.calendar
         panel = KeyablePanel(contentRect: .zero,
                              styleMask: [.borderless, .nonactivatingPanel],
                              backing: .buffered,
@@ -72,6 +81,9 @@ final class NotchWindowController {
         reminderService.requestAccess()
         systemStats.start()
         airPods.start()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.calendarServiceRefresh()
+        }
         // The canvas window owns its size; SwiftUI animates within it.
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
@@ -104,6 +116,7 @@ final class NotchWindowController {
     deinit {
         eventMonitors.forEach { NSEvent.removeMonitor($0) }
         pollTimer?.invalidate()
+        refreshTimer?.invalidate()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
     }
 
