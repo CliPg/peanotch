@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="Assets/promo.png" alt="Peanotch" width="880">
+
 # 🥜 Peanotch
 
 **一个极简的 macOS 刘海（Notch）小应用**
