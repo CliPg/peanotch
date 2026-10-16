@@ -129,6 +129,11 @@ struct NotchView: View {
         .onChange(of: layout.calendarMode) { on in
             if on { loadCalendarMarkers() }
         }
+        .onChange(of: layout.monthShift) { shift in
+            guard shift != 0 else { return }
+            calendarShiftMonth(shift)
+            layout.monthShift = 0
+        }
     }
 
     // MARK: - Compact band (side wings beside the notch)

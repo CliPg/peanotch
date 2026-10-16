@@ -5,6 +5,8 @@ import SwiftUI
 final class NotchLayoutState: ObservableObject {
     @Published var expanded = false
     @Published var calendarMode = false
+    /// +1 / -1 pulse from trackpad swipes; consumed by the calendar view.
+    @Published var monthShift = 0
     @Published var calendarWidth: CGFloat = 480
     @Published var calendarHeight: CGFloat = 560
     @Published var sideInset: CGFloat = 56
@@ -194,6 +196,28 @@ final class NotchWindowController {
     /// menu bar (which is exactly where the notch lives), so they can't drive
     /// proximity expansion.
     private func installHoverMonitors() {
+        // Mouse moves refresh the canvas event gating immediately (the probe
+        // only reports enter/exit while it is click-through, and the 0.2s poll
+        // alone is too slow for fast pointer moves onto small buttons).
+        let moves: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: moves) { [weak self] _ in
+            self?.evaluateHover()
+        } as Any)
+        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: moves) { [weak self] event in
+            self?.evaluateHover()
+            return event
+        } as Any)
+
+        // Two-finger horizontal swipe over the calendar switches months.
+        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, self.layout.calendarMode, event.phase == .began else { return event }
+            let delta = event.scrollingDeltaX
+            if abs(delta) > 8 {
+                self.layout.monthShift = delta > 0 ? -1 : 1
+            }
+            return event
+        } as Any)
+
         let downs: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         eventMonitors.append(NSEvent.addGlobalMonitorForEvents(matching: downs) { [weak self] _ in
             self?.handleMouseDown()
