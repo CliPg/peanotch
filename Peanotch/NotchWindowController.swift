@@ -120,7 +120,7 @@ final class NotchWindowController {
             }
         }
 
-        Diagnostics.record("canvas created, frame=\(canvasFrame), compact=\(compactFrame), expanded=\(expandedFrame), screen=\(panel.screen?.localizedName ?? "nil")")
+        Diagnostics.record("canvas created, frame=\(canvasFrame), compact=\(compactFrame), expanded=\(expandedFrame), calendar=\(calendarFrame), screen=\(panel.screen?.localizedName ?? "nil")")
     }
 
     deinit {
@@ -171,6 +171,12 @@ final class NotchWindowController {
         layout.compactHeight = bandHeight
         layout.expandedWidth = min(1100, screen.frame.width - 80)
         layout.expandedHeight = 293
+        layout.calendarWidth = min(480, screen.frame.width - 80)
+        layout.calendarHeight = 560
+        calendarFrame = NSRect(x: screen.frame.midX - layout.calendarWidth / 2,
+                               y: screen.frame.maxY - layout.calendarHeight,
+                               width: layout.calendarWidth,
+                               height: layout.calendarHeight)
 
         compactFrame = NSRect(x: screen.frame.midX - layout.compactWidth / 2,
                               y: screen.frame.maxY - layout.compactHeight,
@@ -209,10 +215,19 @@ final class NotchWindowController {
         } as Any)
 
         // Two-finger horizontal swipe over the calendar switches months.
-        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, self.layout.calendarMode, event.phase == .began else { return event }
-            let delta = event.scrollingDeltaX
-            if abs(delta) > 8 {
+        eventMonitors.append(NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .swipe]) { [weak self] event in
+            guard let self, self.layout.calendarMode else { return event }
+            let delta: CGFloat
+            switch event.type {
+            case .swipe:
+                delta = event.deltaX
+            case .scrollWheel:
+                guard event.phase == .began else { return event }
+                delta = event.scrollingDeltaX
+            default:
+                return event
+            }
+            if abs(delta) > 0.5 {
                 self.layout.monthShift = delta > 0 ? -1 : 1
             }
             return event

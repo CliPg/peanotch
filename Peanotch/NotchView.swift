@@ -228,6 +228,7 @@ struct NotchView: View {
         if let shifted = calendarCalculator.date(byAdding: .month, value: delta, to: calendarMonthAnchor) {
             calendarMonthAnchor = calendarCalculator.startOfDay(for: shifted)
             loadCalendarMarkers()
+            Diagnostics.record("calendar: month shift \(delta) -> \(calendarMonthAnchor)")
         }
     }
 
