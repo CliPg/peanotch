@@ -18,6 +18,7 @@ struct NotchView: View {
     @EnvironmentObject var countdowns: CountdownService
     @EnvironmentObject var reminderService: ReminderService
     @EnvironmentObject var systemStats: SystemStatsService
+    @EnvironmentObject var airPods: AirPodsBatteryService
 
     @State private var now = Date()
     @State private var newReminderTitle = ""
@@ -174,7 +175,7 @@ struct NotchView: View {
             systemCard
                 .frame(width: 195)
         }
-        .frame(height: 215)
+        .frame(height: 235)
     }
 
     // MARK: - System card (内存 / 硬盘)
@@ -199,6 +200,12 @@ struct NotchView: View {
                     label: L10n.t("网络", "Network"),
                     value: "↓\(Self.speed(snapshot.netDownBytesPerSec)) ↑\(Self.speed(snapshot.netUpBytesPerSec))",
                     fraction: nil)
+            if let airPodsDevice = airPods.device {
+                statRow(icon: "airpodspro",
+                        label: airPodsDevice.name,
+                        value: Self.airPodsValue(airPodsDevice),
+                        fraction: Self.airPodsFraction(airPodsDevice))
+            }
             if snapshot.batteryHealthPercent > 0 {
                 statRow(icon: "bolt.batteryblock",
                         label: L10n.t("电池健康", "Battery Health"),
@@ -257,6 +264,24 @@ struct NotchView: View {
         if ratio > 0.9 { return Color(red: 1.0, green: 0.42, blue: 0.24) }
         if ratio > 0.75 { return Color(red: 0.96, green: 0.78, blue: 0.29) }
         return Color.white.opacity(0.85)
+    }
+
+    /// "88·85·70" (left·right·case) or a single percentage.
+    private static func airPodsValue(_ device: AirPodsBatteryService.AirPods) -> String {
+        var parts: [String] = []
+        if let left = device.left { parts.append("\(left)") }
+        if let right = device.right { parts.append("\(right)") }
+        if let caseBattery = device.caseBattery { parts.append("\(caseBattery)") }
+        if parts.isEmpty, let single = device.single { parts.append("\(single)%") }
+        return parts.joined(separator: "·")
+    }
+
+    private static func airPodsFraction(_ device: AirPodsBatteryService.AirPods) -> Double {
+        let levels = [device.left, device.right, device.caseBattery].compactMap { $0 }
+        guard !levels.isEmpty else {
+            return Double(device.single ?? 0) / 100
+        }
+        return Double(levels.min() ?? 0) / 100
     }
 
     private static func speed(_ bytesPerSec: Int64) -> String {

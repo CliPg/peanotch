@@ -8,7 +8,7 @@ final class NotchLayoutState: ObservableObject {
     @Published var compactWidth: CGFloat = 291
     @Published var compactHeight: CGFloat = 32
     @Published var expandedWidth: CGFloat = 1100
-    @Published var expandedHeight: CGFloat = 273
+    @Published var expandedHeight: CGFloat = 293
 }
 
 /// Sapphire-style notch controller.
@@ -28,6 +28,7 @@ final class NotchWindowController {
     private let countdownService = CountdownService()
     private let reminderService = ReminderService()
     private let systemStats = SystemStatsService()
+    private let airPods = AirPodsBatteryService()
     private var editorWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var hoverProbe: NSPanel?
@@ -66,9 +67,11 @@ final class NotchWindowController {
             .environmentObject(countdownService)
             .environmentObject(reminderService)
             .environmentObject(systemStats)
+            .environmentObject(airPods)
             .environmentObject(AppSettings.shared))
         reminderService.requestAccess()
         systemStats.start()
+        airPods.start()
         // The canvas window owns its size; SwiftUI animates within it.
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
@@ -144,7 +147,7 @@ final class NotchWindowController {
         layout.compactWidth = notchWidth + sideInset * 2
         layout.compactHeight = bandHeight
         layout.expandedWidth = min(1100, screen.frame.width - 80)
-        layout.expandedHeight = 273
+        layout.expandedHeight = 293
 
         compactFrame = NSRect(x: screen.frame.midX - layout.compactWidth / 2,
                               y: screen.frame.maxY - layout.compactHeight,
