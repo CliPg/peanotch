@@ -177,6 +177,12 @@ struct SettingsView: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                 }
+                rowDivider
+                settingsRow(L10n.t("仅显示主队比赛", "Favorite teams only")) {
+                    Toggle("", isOn: $settings.onlyFavoriteGames)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
             }
             settingsGroup {
                 settingsRow(L10n.t("运动项目", "Sport")) {

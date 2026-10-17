@@ -1032,7 +1032,9 @@ struct NotchView: View {
             }
         }
         if settings.showSportsCard {
-            for game in sports.games where Calendar.current.isDate(game.startTime, inSameDayAs: calendarService.selectedDate) {
+            for game in sports.games
+            where Calendar.current.isDate(game.startTime, inSameDayAs: calendarService.selectedDate)
+                  && (!settings.onlyFavoriteGames || isFavoriteGame(game)) {
                 items.append(ScheduleItem(id: "game:\(game.id)", title: gameText(game),
                                           time: game.startTime, untimed: false, reminder: nil, game: game))
             }

@@ -28,6 +28,10 @@ final class AppSettings: ObservableObject {
     @Published var showSportsCard: Bool {
         didSet { UserDefaults.standard.set(showSportsCard, forKey: Self.sportsCardKey) }
     }
+    /// Only show favorite-team games in the calendar schedule
+    @Published var onlyFavoriteGames: Bool {
+        didSet { UserDefaults.standard.set(onlyFavoriteGames, forKey: Self.onlyFavoriteGamesKey) }
+    }
     /// Chinese team names (as used by the Hupu data source), order-stable
     @Published var favoriteTeams: [String] {
         didSet {
@@ -42,6 +46,7 @@ final class AppSettings: ObservableObject {
     private static let clock24hKey = "peanotch.settings.clock24h"
     private static let hapticKey = "peanotch.settings.haptic"
     private static let sportsCardKey = "peanotch.settings.showSportsCard"
+    private static let onlyFavoriteGamesKey = "peanotch.settings.onlyFavoriteGames"
     private static let favoriteTeamsKey = "peanotch.settings.favoriteTeams"
 
     var resolvedLanguage: String {
@@ -57,6 +62,7 @@ final class AppSettings: ObservableObject {
         clock24h = defaults.object(forKey: Self.clock24hKey) as? Bool ?? true
         hapticFeedback = defaults.object(forKey: Self.hapticKey) as? Bool ?? true
         showSportsCard = defaults.object(forKey: Self.sportsCardKey) as? Bool ?? false
+        onlyFavoriteGames = defaults.object(forKey: Self.onlyFavoriteGamesKey) as? Bool ?? false
         favoriteTeams = defaults.stringArray(forKey: Self.favoriteTeamsKey) ?? []
     }
 }
