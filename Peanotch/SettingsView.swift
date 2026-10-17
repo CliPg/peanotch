@@ -172,7 +172,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             paneTitle(L10n.t("比赛日程", "Sports"))
             settingsGroup {
-                settingsRow(L10n.t("显示赛程卡片", "Show schedule card")) {
+                settingsRow(L10n.t("显示比赛赛程", "Show game schedule")) {
                     Toggle("", isOn: $settings.showSportsCard)
                         .labelsHidden()
                         .toggleStyle(.switch)
@@ -198,8 +198,8 @@ struct SettingsView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
             }
-            footnote(L10n.t("赛程数据来自虎扑。每天更新一次；主队比赛进行中时每 2 分钟刷新比分。更多运动项目后续支持。",
-                            "Schedule data from Hupu. Refreshed daily; scores refresh every 2 minutes while a favorite team is playing. More sports coming later."))
+            footnote(L10n.t("比赛按开球时间并入日历日程（仪表盘日历卡片与完整日历），主队比赛金色高亮。赛程每天更新一次，主队比赛进行中时每 2 分钟刷新比分。",
+                            "Games merge into the calendar schedule by tip-off time (dashboard calendar card and full calendar); favorite-team games are highlighted. Schedule refreshes daily; scores refresh every 2 minutes while a favorite team is playing."))
         }
     }
 
