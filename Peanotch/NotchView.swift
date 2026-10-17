@@ -607,11 +607,18 @@ struct NotchView: View {
                     .foregroundStyle(Color.white.opacity(0.45))
                     .padding(.vertical, 2)
             } else {
-                ForEach(scheduleItems) { item in
-                    scheduleRowContent(item, compact: true)
+                // Takes the space left by the fixed grid and composer; long
+                // days scroll here instead of pushing the composer away.
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(scheduleItems) { item in
+                            scheduleRowContent(item, compact: true)
+                        }
+                    }
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var calendarComposer: some View {
@@ -941,12 +948,14 @@ struct NotchView: View {
                         .padding(.top, 2)
                     Spacer(minLength: 0)
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(scheduleItems) { item in
-                            scheduleRow(item)
+                    // Bounded, scrollable — a busy day never stretches the card.
+                    ScrollView(.vertical) {
+                        VStack(spacing: 0) {
+                            ForEach(scheduleItems) { item in
+                                scheduleRow(item)
+                            }
                         }
                     }
-                    Spacer(minLength: 0)
                 }
             } else if calendarService.authorized == false {
                 Button(L10n.t("点击授权日历访问", "Grant calendar access")) { calendarService.requestAndLoad() }
@@ -1028,7 +1037,11 @@ struct NotchView: View {
                                           time: game.startTime, untimed: false, reminder: nil, game: game))
             }
         }
+        // To-dos and events stay above games; within each group, by time.
         items.sort {
+            let aIsGame = $0.game != nil
+            let bIsGame = $1.game != nil
+            if aIsGame != bIsGame { return !aIsGame }
             switch ($0.time, $1.time) {
             case let (a?, b?): return a < b
             case (_?, nil): return true
@@ -1036,7 +1049,8 @@ struct NotchView: View {
             default: return false
             }
         }
-        return Array(items.prefix(4))
+        // The lists scroll, so allow more than a screenful of rows.
+        return Array(items.prefix(12))
     }
 
     /// "客队 @ 主队" or, once scores exist, "客队 88-91 主队".
