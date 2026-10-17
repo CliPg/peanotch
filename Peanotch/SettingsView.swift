@@ -168,6 +168,12 @@ struct SettingsView: View {
 
     // MARK: - Sports pane
 
+    private enum SportTab: Hashable {
+        case nba, cs2
+    }
+
+    @State private var sportTab: SportTab = .nba
+
     private var sportsPane: some View {
         VStack(alignment: .leading, spacing: 14) {
             paneTitle(L10n.t("比赛日程", "Sports"))
@@ -177,64 +183,62 @@ struct SettingsView: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                 }
-                rowDivider
-                settingsRow(L10n.t("仅显示主队比赛", "Favorite teams only")) {
-                    Toggle("", isOn: $settings.onlyFavoriteGames)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
             }
-            settingsGroup {
-                settingsRow(L10n.t("运动项目", "Sport")) {
-                    HStack(spacing: 8) {
-                        sportChip(L10n.t("篮球 · NBA", "Basketball · NBA"), selected: true)
-                        sportChip(L10n.t("电竞 · CS2", "Esports · CS2"), selected: true)
-                        sportChip(L10n.t("足球", "Soccer"), selected: false, disabled: true)
-                    }
-                }
-                rowDivider
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(L10n.t("主队（可多选，比赛进行时高频刷新）", "Favorite teams (select any; live games refresh faster)"))
-                        .font(.system(size: 13))
-                    Text("NBA")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 6)], spacing: 6) {
-                        ForEach(SportsService.nbaTeamsEast + SportsService.nbaTeamsWest, id: \.self) { team in
-                            teamChip(team)
-                        }
-                    }
-                    Text(L10n.t("CS2 · 前 20 战队", "CS2 · Top 20 teams"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 6)], spacing: 6) {
-                        ForEach(SportsService.cs2TopTeams, id: \.self) { team in
-                            teamChip(team, label: SportsService.cs2TeamAliases[team])
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+            // Each sport keeps its own favorites and its own favorites-only
+            // switch; pages instead of one crowded list.
+            Picker("", selection: $sportTab) {
+                Text(L10n.t("篮球 · NBA", "Basketball · NBA")).tag(SportTab.nba)
+                Text(L10n.t("电竞 · CS2", "Esports · CS2")).tag(SportTab.cs2)
             }
-            footnote(L10n.t("比赛按开球时间并入日历日程（仪表盘日历卡片与完整日历），主队比赛金色高亮。NBA 赛程每天更新一次；CS2 只收录 S 级赛事；主队比赛或 S 级比赛进行中时每 2 分钟刷新比分。",
-                            "Games merge into the calendar schedule by tip-off time; favorite-team games are highlighted. NBA refreshes daily; CS2 covers S-tier tournaments only; scores refresh every 2 minutes while a tracked match is live."))
+            .pickerStyle(.segmented)
+            .frame(width: 280)
+
+            switch sportTab {
+            case .nba: nbaSection
+            case .cs2: cs2Section
+            }
+            footnote(L10n.t("比赛按开球时间并入日历日程，主队比赛金色高亮并按战队颜色标记日期。NBA 赛程每天更新；CS2 只收录 S 级赛事；主队或 S 级比赛进行中时每 2 分钟刷新比分。更多项目（足球等）后续支持。",
+                            "Games merge into the calendar schedule by tip-off time; favorite games are highlighted and days are dotted in team colors. NBA refreshes daily; CS2 covers S-tier tournaments only; scores refresh every 2 minutes while a tracked match is live. More sports coming later."))
         }
     }
 
-    private func sportChip(_ text: String, selected: Bool, disabled: Bool = false) -> some View {
-        HStack(spacing: 4) {
-            if selected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 9, weight: .bold))
+    private var nbaSection: some View {
+        settingsGroup {
+            settingsRow(L10n.t("仅显示主队比赛", "Favorite teams only")) {
+                Toggle("", isOn: $settings.onlyFavoriteNbaGames)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
             }
-            Text(text)
-                .font(.system(size: 12))
+            rowDivider
+            teamGrid(SportsService.nbaTeamsEast + SportsService.nbaTeamsWest, minimum: 76)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(selected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.08)))
-        .foregroundStyle(disabled ? Color.secondary : Color.primary)
-        .opacity(disabled ? 0.55 : 1)
+    }
+
+    private var cs2Section: some View {
+        settingsGroup {
+            settingsRow(L10n.t("仅显示主队比赛", "Favorite teams only")) {
+                Toggle("", isOn: $settings.onlyFavoriteCs2Games)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+            rowDivider
+            Text(L10n.t("前 20 战队 · 只收录 S 级赛事", "Top 20 teams · S-tier events only"))
+                .font(.system(size: 11))
+                .foregroundStyle(Color.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            teamGrid(SportsService.cs2TopTeams, minimum: 88, aliases: SportsService.cs2TeamAliases)
+        }
+    }
+
+    private func teamGrid(_ teams: [String], minimum: CGFloat, aliases: [String: String] = [:]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum), spacing: 6)], spacing: 6) {
+            ForEach(teams, id: \.self) { team in
+                teamChip(team, label: aliases[team])
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     private func teamChip(_ team: String, label: String? = nil) -> some View {

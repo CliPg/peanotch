@@ -28,9 +28,12 @@ final class AppSettings: ObservableObject {
     @Published var showSportsCard: Bool {
         didSet { UserDefaults.standard.set(showSportsCard, forKey: Self.sportsCardKey) }
     }
-    /// Only show favorite-team games in the calendar schedule
-    @Published var onlyFavoriteGames: Bool {
-        didSet { UserDefaults.standard.set(onlyFavoriteGames, forKey: Self.onlyFavoriteGamesKey) }
+    /// Per-sport: only show favorite-team games in the calendar schedule
+    @Published var onlyFavoriteNbaGames: Bool {
+        didSet { UserDefaults.standard.set(onlyFavoriteNbaGames, forKey: Self.onlyFavoriteNbaKey) }
+    }
+    @Published var onlyFavoriteCs2Games: Bool {
+        didSet { UserDefaults.standard.set(onlyFavoriteCs2Games, forKey: Self.onlyFavoriteCs2Key) }
     }
     /// Chinese team names (as used by the Hupu data source), order-stable
     @Published var favoriteTeams: [String] {
@@ -46,12 +49,19 @@ final class AppSettings: ObservableObject {
     private static let clock24hKey = "peanotch.settings.clock24h"
     private static let hapticKey = "peanotch.settings.haptic"
     private static let sportsCardKey = "peanotch.settings.showSportsCard"
-    private static let onlyFavoriteGamesKey = "peanotch.settings.onlyFavoriteGames"
+    private static let onlyFavoriteNbaKey = "peanotch.settings.onlyFavoriteNba"
+    private static let onlyFavoriteCs2Key = "peanotch.settings.onlyFavoriteCs2"
+    private static let legacyOnlyFavoriteKey = "peanotch.settings.onlyFavoriteGames"
     private static let favoriteTeamsKey = "peanotch.settings.favoriteTeams"
 
     var resolvedLanguage: String {
         if language == "zh" || language == "en" { return language }
         return Locale.preferredLanguages.first?.hasPrefix("zh") == true ? "zh" : "en"
+    }
+
+    /// The favorites-only filter is a per-sport switch in settings.
+    func onlyFavorites(for sport: SportsService.Sport) -> Bool {
+        sport == .cs2 ? onlyFavoriteCs2Games : onlyFavoriteNbaGames
     }
 
     private init() {
@@ -62,7 +72,16 @@ final class AppSettings: ObservableObject {
         clock24h = defaults.object(forKey: Self.clock24hKey) as? Bool ?? true
         hapticFeedback = defaults.object(forKey: Self.hapticKey) as? Bool ?? true
         showSportsCard = defaults.object(forKey: Self.sportsCardKey) as? Bool ?? false
-        onlyFavoriteGames = defaults.object(forKey: Self.onlyFavoriteGamesKey) as? Bool ?? false
+        // Migrate the old single toggle to both per-sport switches.
+        if let legacy = defaults.object(forKey: Self.legacyOnlyFavoriteKey) as? Bool,
+           defaults.object(forKey: Self.onlyFavoriteNbaKey) == nil,
+           defaults.object(forKey: Self.onlyFavoriteCs2Key) == nil {
+            onlyFavoriteNbaGames = legacy
+            onlyFavoriteCs2Games = legacy
+        } else {
+            onlyFavoriteNbaGames = defaults.object(forKey: Self.onlyFavoriteNbaKey) as? Bool ?? false
+            onlyFavoriteCs2Games = defaults.object(forKey: Self.onlyFavoriteCs2Key) as? Bool ?? false
+        }
         favoriteTeams = defaults.stringArray(forKey: Self.favoriteTeamsKey) ?? []
     }
 }
