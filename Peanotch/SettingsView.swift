@@ -188,6 +188,7 @@ struct SettingsView: View {
                 settingsRow(L10n.t("运动项目", "Sport")) {
                     HStack(spacing: 8) {
                         sportChip(L10n.t("篮球 · NBA", "Basketball · NBA"), selected: true)
+                        sportChip(L10n.t("电竞 · CS2", "Esports · CS2"), selected: true)
                         sportChip(L10n.t("足球", "Soccer"), selected: false, disabled: true)
                     }
                 }
@@ -195,17 +196,28 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(L10n.t("主队（可多选，比赛进行时高频刷新）", "Favorite teams (select any; live games refresh faster)"))
                         .font(.system(size: 13))
+                    Text("NBA")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.secondary)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 6)], spacing: 6) {
                         ForEach(SportsService.nbaTeamsEast + SportsService.nbaTeamsWest, id: \.self) { team in
                             teamChip(team)
+                        }
+                    }
+                    Text(L10n.t("CS2 · 前 20 战队", "CS2 · Top 20 teams"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.secondary)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 6)], spacing: 6) {
+                        ForEach(SportsService.cs2TopTeams, id: \.self) { team in
+                            teamChip(team, label: SportsService.cs2TeamAliases[team])
                         }
                     }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
             }
-            footnote(L10n.t("比赛按开球时间并入日历日程（仪表盘日历卡片与完整日历），主队比赛金色高亮。赛程每天更新一次，主队比赛进行中时每 2 分钟刷新比分。",
-                            "Games merge into the calendar schedule by tip-off time (dashboard calendar card and full calendar); favorite-team games are highlighted. Schedule refreshes daily; scores refresh every 2 minutes while a favorite team is playing."))
+            footnote(L10n.t("比赛按开球时间并入日历日程（仪表盘日历卡片与完整日历），主队比赛金色高亮。NBA 赛程每天更新一次；CS2 只收录 S 级赛事；主队比赛或 S 级比赛进行中时每 2 分钟刷新比分。",
+                            "Games merge into the calendar schedule by tip-off time; favorite-team games are highlighted. NBA refreshes daily; CS2 covers S-tier tournaments only; scores refresh every 2 minutes while a tracked match is live."))
         }
     }
 
@@ -225,7 +237,7 @@ struct SettingsView: View {
         .opacity(disabled ? 0.55 : 1)
     }
 
-    private func teamChip(_ team: String) -> some View {
+    private func teamChip(_ team: String, label: String? = nil) -> some View {
         let selected = settings.favoriteTeams.contains(team)
         return Button {
             if selected {
@@ -240,7 +252,7 @@ struct SettingsView: View {
                         .font(.system(size: 8))
                         .foregroundStyle(Color(red: 0.96, green: 0.78, blue: 0.29))
                 }
-                Text(team)
+                Text(label ?? team)
                     .font(.system(size: 12))
                     .lineLimit(1)
             }

@@ -38,10 +38,11 @@ struct NotchView: View {
     /// Sapphire's expansion curve: noticeable overshoot, quick settle.
     private static let expansionAnimation = Animation.spring(response: 0.4, dampingFraction: 0.55, blendDuration: 0)
 
-    /// One highlight color per NBA team (brand colors, tuned to stay readable
-    /// on the black surface) — used to mark days when a favorite team plays.
+    /// One highlight color per team (brand colors, tuned to stay readable on
+    /// the black surface) — used to mark days when a favorite team plays.
+    /// NBA teams by their Chinese data names, CS2 teams by 5E's names.
     private static let nbaTeamColors: [String: Color] = [
-        // East
+        // NBA East
         "凯尔特人": Color(red: 0.00, green: 0.65, blue: 0.32),
         "篮网": Color(red: 0.62, green: 0.63, blue: 0.64),
         "尼克斯": Color(red: 0.96, green: 0.52, blue: 0.15),
@@ -57,7 +58,7 @@ struct NotchView: View {
         "热火": Color(red: 0.88, green: 0.24, blue: 0.37),
         "魔术": Color(red: 0.24, green: 0.61, blue: 0.91),
         "奇才": Color(red: 0.29, green: 0.37, blue: 0.85),
-        // West
+        // NBA West
         "独行侠": Color(red: 0.18, green: 0.53, blue: 0.84),
         "火箭": Color(red: 0.89, green: 0.27, blue: 0.36),
         "灰熊": Color(red: 0.51, green: 0.60, blue: 0.79),
@@ -73,6 +74,27 @@ struct NotchView: View {
         "湖人": Color(red: 0.99, green: 0.73, blue: 0.15),
         "太阳": Color(red: 0.94, green: 0.45, blue: 0.16),
         "国王": Color(red: 0.54, green: 0.33, blue: 0.74),
+        // CS2 (5E names)
+        "Vitality": Color(red: 0.98, green: 0.92, blue: 0.10),
+        "MOUZ": Color(red: 0.90, green: 0.05, blue: 0.12),
+        "Spirit": Color(red: 1.00, green: 0.50, blue: 0.00),
+        "Falcons": Color(red: 0.00, green: 0.65, blue: 0.35),
+        "Mongolz": Color(red: 0.15, green: 0.50, blue: 0.90),
+        "Aurora": Color(red: 0.48, green: 0.30, blue: 0.75),
+        "G2": Color(red: 0.95, green: 0.35, blue: 0.30),
+        "NAVI": Color(red: 1.00, green: 0.72, blue: 0.05),
+        "FURIA": Color(red: 0.90, green: 0.90, blue: 0.92),
+        "Liquid": Color(red: 0.25, green: 0.40, blue: 0.95),
+        "FaZe": Color(red: 0.85, green: 0.35, blue: 0.45),
+        "Virtus.pro": Color(red: 0.95, green: 0.44, blue: 0.13),
+        "Astralis": Color(red: 0.88, green: 0.10, blue: 0.18),
+        "TYLOO": Color(red: 0.90, green: 0.15, blue: 0.25),
+        "Legacy": Color(red: 0.00, green: 0.64, blue: 0.88),
+        "Nemiga": Color(red: 0.60, green: 0.85, blue: 1.00),
+        "MIBR": Color(red: 0.94, green: 0.30, blue: 0.20),
+        "Ninjas in Pyjamas": Color(red: 0.55, green: 0.65, blue: 1.00),
+        "9z": Color(red: 0.10, green: 0.70, blue: 0.75),
+        "FUT": Color(red: 0.85, green: 0.45, blue: 0.55),
     ]
 
     private static func nbaTeamColor(_ team: String) -> Color {
@@ -1055,12 +1077,13 @@ struct NotchView: View {
         return Array(items.prefix(12))
     }
 
-    /// "客队 @ 主队" or, once scores exist, "客队 88-91 主队".
+    /// NBA: "客队 @ 主队" / "客队 88-91 主队"; CS2: "NiP vs MIBR" / "NiP 2-0 MIBR".
     private func gameText(_ game: SportsService.Game) -> String {
+        let separator = game.sport == .cs2 ? "vs" : "@"
         if let home = game.homeScore, let away = game.awayScore {
             return "\(game.awayTeam) \(away)-\(home) \(game.homeTeam)"
         }
-        return "\(game.awayTeam) @ \(game.homeTeam)"
+        return "\(game.awayTeam) \(separator) \(game.homeTeam)"
     }
 
     private func isFavoriteGame(_ game: SportsService.Game) -> Bool {
@@ -1083,7 +1106,7 @@ struct NotchView: View {
                 }
                 .buttonStyle(.plain)
             } else if let game = item.game {
-                Image(systemName: "sportscourt.fill")
+                Image(systemName: game.sport == .cs2 ? "gamecontroller.fill" : "sportscourt.fill")
                     .font(.system(size: compact ? 8 : 9))
                     .foregroundStyle(isFavoriteGame(game)
                                      ? Color(red: 0.96, green: 0.78, blue: 0.29)
