@@ -38,6 +38,61 @@ struct NotchView: View {
     /// Sapphire's expansion curve: noticeable overshoot, quick settle.
     private static let expansionAnimation = Animation.spring(response: 0.4, dampingFraction: 0.55, blendDuration: 0)
 
+    /// One highlight color per NBA team (brand colors, tuned to stay readable
+    /// on the black surface) — used to mark days when a favorite team plays.
+    private static let nbaTeamColors: [String: Color] = [
+        // East
+        "凯尔特人": Color(red: 0.00, green: 0.65, blue: 0.32),
+        "篮网": Color(red: 0.62, green: 0.63, blue: 0.64),
+        "尼克斯": Color(red: 0.96, green: 0.52, blue: 0.15),
+        "76人": Color(red: 0.13, green: 0.50, blue: 0.90),
+        "猛龙": Color(red: 0.88, green: 0.12, blue: 0.30),
+        "公牛": Color(red: 0.90, green: 0.14, blue: 0.22),
+        "骑士": Color(red: 0.75, green: 0.10, blue: 0.31),
+        "活塞": Color(red: 0.29, green: 0.45, blue: 0.90),
+        "步行者": Color(red: 0.99, green: 0.73, blue: 0.19),
+        "雄鹿": Color(red: 0.20, green: 0.66, blue: 0.33),
+        "老鹰": Color(red: 0.76, green: 0.83, blue: 0.18),
+        "黄蜂": Color(red: 0.12, green: 0.70, blue: 0.77),
+        "热火": Color(red: 0.88, green: 0.24, blue: 0.37),
+        "魔术": Color(red: 0.24, green: 0.61, blue: 0.91),
+        "奇才": Color(red: 0.29, green: 0.37, blue: 0.85),
+        // West
+        "独行侠": Color(red: 0.18, green: 0.53, blue: 0.84),
+        "火箭": Color(red: 0.89, green: 0.27, blue: 0.36),
+        "灰熊": Color(red: 0.51, green: 0.60, blue: 0.79),
+        "鹈鹕": Color(red: 0.79, green: 0.60, blue: 0.27),
+        "马刺": Color(red: 0.77, green: 0.81, blue: 0.83),
+        "掘金": Color(red: 1.00, green: 0.77, blue: 0.14),
+        "森林狼": Color(red: 0.24, green: 0.50, blue: 0.76),
+        "雷霆": Color(red: 0.18, green: 0.64, blue: 0.91),
+        "开拓者": Color(red: 0.89, green: 0.27, blue: 0.27),
+        "爵士": Color(red: 0.98, green: 0.63, blue: 0.11),
+        "勇士": Color(red: 0.18, green: 0.37, blue: 0.79),
+        "快船": Color(red: 0.84, green: 0.27, blue: 0.38),
+        "湖人": Color(red: 0.99, green: 0.73, blue: 0.15),
+        "太阳": Color(red: 0.94, green: 0.45, blue: 0.16),
+        "国王": Color(red: 0.54, green: 0.33, blue: 0.74),
+    ]
+
+    private static func nbaTeamColor(_ team: String) -> Color {
+        nbaTeamColors[team] ?? Color.white.opacity(0.6)
+    }
+
+    /// Favorite teams playing on `day`, in tip-off order (unique).
+    private func favoriteTeamsPlaying(on day: Date) -> [String] {
+        guard settings.showSportsCard, !settings.favoriteTeams.isEmpty else { return [] }
+        let calendar = Calendar.current
+        var seen: Set<String> = []
+        var ordered: [String] = []
+        for game in sports.games where calendar.isDate(game.startTime, inSameDayAs: day) {
+            for team in [game.homeTeam, game.awayTeam] where settings.favoriteTeams.contains(team) {
+                if seen.insert(team).inserted { ordered.append(team) }
+            }
+        }
+        return ordered
+    }
+
     private var isEnglish: Bool { settings.resolvedLanguage == "en" }
     private var localeIdentifier: String { isEnglish ? "en_US" : "zh_CN" }
 
@@ -494,16 +549,28 @@ struct NotchView: View {
         let isToday = calendar.isDateInToday(date)
         let isSelected = calendar.isDate(date, inSameDayAs: calendarService.selectedDate)
         let hasItems = (calendarDayCounts[calendar.component(.day, from: date)] ?? 0) > 0
+        let favoriteTeams = favoriteTeamsPlaying(on: date)
+        // A day with a single favorite team takes that team's color for the
+        // date number (selection white still wins for readability).
+        let numberColor: Color = isSelected ? Color.white
+            : favoriteTeams.count == 1 ? Self.nbaTeamColor(favoriteTeams[0])
+            : isToday ? Color(red: 0.96, green: 0.78, blue: 0.29)
+            : Color.white.opacity(0.8)
         return Button(action: { calendarSelectDay(date) }) {
             VStack(spacing: 2) {
                 Text("\(calendar.component(.day, from: date))")
                     .font(.system(size: 12, weight: isSelected || isToday ? .semibold : .regular, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(isToday ? Color(red: 0.96, green: 0.78, blue: 0.29)
-                                             : (isSelected ? Color.white : Color.white.opacity(0.8)))
-                Circle()
-                    .fill(hasItems ? Color(red: 0.96, green: 0.78, blue: 0.29) : Color.clear)
-                    .frame(width: 3, height: 3)
+                    .foregroundStyle(numberColor)
+                HStack(spacing: 2) {
+                    if hasItems {
+                        Circle().fill(Color(red: 0.96, green: 0.78, blue: 0.29)).frame(width: 3, height: 3)
+                    }
+                    ForEach(favoriteTeams.prefix(hasItems ? 2 : 3), id: \.self) { team in
+                        Circle().fill(Self.nbaTeamColor(team)).frame(width: 3, height: 3)
+                    }
+                }
+                .frame(height: 3)
             }
             .frame(maxWidth: .infinity, minHeight: 34)
             .background(Capsule().fill(isSelected ? Color.white.opacity(0.16) : Color.clear))
@@ -1084,9 +1151,15 @@ struct NotchView: View {
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(numberColor)
+            HStack(spacing: 2) {
+                ForEach(favoriteTeamsPlaying(on: day).prefix(2), id: \.self) { team in
+                    Circle().fill(Self.nbaTeamColor(team)).frame(width: 3, height: 3)
+                }
+            }
+            .frame(height: 3)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .background(Capsule().fill(isSelected ? Color.white.opacity(0.16) : Color.clear))
         .contentShape(Rectangle())
         .onTapGesture { calendarService.selectDay(day) }
