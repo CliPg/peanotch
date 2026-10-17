@@ -21,6 +21,7 @@ struct NotchView: View {
     @EnvironmentObject var reminderService: ReminderService
     @EnvironmentObject var systemStats: SystemStatsService
     @EnvironmentObject var airPods: AirPodsBatteryService
+    @EnvironmentObject var sports: SportsService
 
     @State private var now = Date()
     @State private var newReminderTitle = ""
@@ -626,8 +627,134 @@ struct NotchView: View {
                 .frame(width: 210)
             systemCard
                 .frame(width: 195)
+            if settings.showSportsCard {
+                sportsCard
+                    .frame(width: 195)
+            }
         }
         .frame(height: 235)
+    }
+
+    // MARK: - Sports card (虎扑赛程)
+
+    private var favoriteTeamSet: Set<String> { Set(settings.favoriteTeams) }
+
+    /// Today's games, favorites and live ones first; if the day is empty the
+    /// next upcoming game is teased instead.
+    private var todaySportsGames: [SportsService.Game] {
+        let calendar = Calendar.current
+        let favorites = favoriteTeamSet
+        let today = sports.games.filter { calendar.isDateInToday($0.startTime) }
+        let ordered = today.sorted {
+            if $0.status == .live && $1.status != .live { return true }
+            if $1.status == .live && $0.status != .live { return false }
+            let fav0 = sports.involvesFavorite($0, favorites: favorites)
+            let fav1 = sports.involvesFavorite($1, favorites: favorites)
+            if fav0 != fav1 { return fav0 }
+            return $0.startTime < $1.startTime
+        }
+        return Array(ordered.prefix(4))
+    }
+
+    private var nextSportsGame: SportsService.Game? {
+        sports.games
+            .filter { $0.status == .scheduled && $0.startTime > now }
+            .min { $0.startTime < $1.startTime }
+    }
+
+    private var sportsCard: some View {
+        let favorites = favoriteTeamSet
+        let games = todaySportsGames
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                sectionLabel(L10n.t("赛程", "Sports"))
+                Spacer()
+                Text("NBA")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+            }
+            if games.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.t("今日无比赛", "No games today"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.5))
+                    if let next = nextSportsGame {
+                        Text(L10n.t("下场", "Next") + " " + Self.sportsTimeText(next.startTime) + "  \(next.awayTeam) @ \(next.homeTeam)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                            .lineLimit(1)
+                    }
+                }
+            } else {
+                ForEach(games) { game in
+                    sportsRow(game, favorites: favorites)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.06)))
+    }
+
+    private func sportsRow(_ game: SportsService.Game, favorites: Set<String>) -> some View {
+        let isFavorite = sports.involvesFavorite(game, favorites: favorites)
+        let nameColor: Color = isFavorite
+            ? Color(red: 0.96, green: 0.78, blue: 0.29)
+            : Color.white.opacity(0.85)
+        let hasScore = game.homeScore != nil && game.awayScore != nil
+        return HStack(spacing: 6) {
+            Group {
+                if game.status == .live {
+                    HStack(spacing: 2) {
+                        Circle().fill(Color.red).frame(width: 4, height: 4)
+                        Text("LIVE")
+                            .font(.system(size: 7, weight: .heavy))
+                            .foregroundStyle(Color.red)
+                    }
+                } else if game.status == .finished {
+                    Text(L10n.t("完", "FIN"))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.3))
+                } else {
+                    Text(Self.sportsTimeText(game.startTime))
+                        .font(.system(size: 9, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.white.opacity(0.55))
+                }
+            }
+            .frame(width: 34, alignment: .leading)
+            Text(game.awayTeam)
+                .font(.system(size: 11))
+                .foregroundStyle(nameColor)
+                .lineLimit(1)
+            if hasScore {
+                Text("\(game.awayScore!)-\(game.homeScore!)")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(game.homeTeam)
+                    .font(.system(size: 11))
+                    .foregroundStyle(nameColor)
+                    .lineLimit(1)
+            } else {
+                Text("@ \(game.homeTeam)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(nameColor)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private static func sportsTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 
     // MARK: - System card (内存 / 硬盘)

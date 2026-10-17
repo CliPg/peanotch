@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Shared with the SwiftUI layer: the surface geometry + expansion state.
@@ -37,6 +38,7 @@ final class NotchWindowController {
     private var refreshTimer: Timer?
     private let systemStats = SystemStatsService()
     private let airPods = AirPodsBatteryService()
+    private let sportsService = SportsService()
     private var settingsWindow: NSWindow?
     private var hoverProbe: NSPanel?
     private var pollTimer: Timer?
@@ -45,6 +47,7 @@ final class NotchWindowController {
     private var isVisible = true
     private var eventMonitors: [Any] = []
     private var screenObserver: NSObjectProtocol?
+    private var sportsCardCancellable: AnyCancellable?
 
     private var calendarService: CalendarService?
 
@@ -87,10 +90,17 @@ final class NotchWindowController {
             .environmentObject(reminderService)
             .environmentObject(systemStats)
             .environmentObject(airPods)
+            .environmentObject(sportsService)
             .environmentObject(AppSettings.shared))
         reminderService.requestAccess()
         systemStats.start()
         airPods.start()
+        sportsService.start()
+        // The dashboard widens when the sports card is enabled.
+        sportsCardCancellable = AppSettings.shared.$showSportsCard
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.computeFrames() }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.calendarServiceRefresh()
         }
@@ -169,7 +179,10 @@ final class NotchWindowController {
 
         layout.compactWidth = notchWidth + sideInset * 2
         layout.compactHeight = bandHeight
-        layout.expandedWidth = min(1100, screen.frame.width - 80)
+        // Wider dashboard when the sports card is on: five fixed cards +
+        // the 195pt schedule card + weather keeping a reasonable flex width.
+        let baseExpandedWidth: CGFloat = AppSettings.shared.showSportsCard ? 1290 : 1100
+        layout.expandedWidth = min(baseExpandedWidth, screen.frame.width - 80)
         layout.expandedHeight = 293
         layout.calendarWidth = min(480, screen.frame.width - 80)
         layout.calendarHeight = 560

@@ -12,8 +12,13 @@
 
 ## 功能
 
-- **刘海时钟** — 在屏幕顶部刘海区域显示一个黑色圆角胶囊，实时显示当前时间
-- **悬停展开** — 鼠标移上去自动向下展开，显示日期；移开自动收回，带平滑动画
+- **刘海仪表盘** — 黑色圆角胶囊平时在刘海区域显示温度与电量，展开后显示完整仪表盘：时钟、天气、日历、倒计时、系统监测
+- **NBA 比赛日程** — 在设置中开启赛程卡片并选择主队；赛程每天更新一次，主队比赛进行中时每 2 分钟刷新比分（数据来自虎扑）
+- **日历与提醒事项** — 读取系统日历与提醒事项（EventKit），支持在刘海内展开完整月历、点选日期、直接创建提醒
+- **重要日子倒计时** — 自定义重要日子，支持在卡片内双击直接编辑、内联新建
+- **系统监测** — CPU、内存、硬盘、网速、电池健康，以及连接中 AirPods 的电量
+- **展开方式可选** — 点击或鼠标靠近展开；弹簧动画过渡，平滑不闪烁
+- **设置** — 语言（中/英）、展开方式、温度单位、24 小时制、触控板震动反馈
 - **菜单栏控制** — 通过菜单栏的 🥜 图标可以显示/隐藏刘海、退出应用
 - **常驻所有空间** — 跟随每个桌面空间与全屏应用显示
 
@@ -33,30 +38,15 @@ open Peanotch.xcodeproj   # 然后在 Xcode 中按 Cmd + R
 **方式二：命令行**
 
 ```bash
-xcodebuild -project Peanotch.xcodeproj -target Peanotch -configuration Debug -derivedDataPath build build
+xcodebuild -project Peanotch.xcodeproj -scheme Peanotch -configuration Debug -derivedDataPath build build
 open build/Build/Products/Debug/Peanotch.app
 ```
 
-## 工作原理
-
-Peanotch 是一个 `LSUIElement` 应用（无 Dock 图标），核心只有一个无边框、透明背景的
-`NSPanel`，固定在屏幕顶部中央（刘海位置），窗口层级为状态栏级别，并加入所有桌面空间。
-窗口内容由 SwiftUI 渲染：一个底部圆角的黑色形状 + 时钟文字。鼠标悬停时通过
-`NSAnimationContext` 动画改变窗口高度实现“展开”效果。
-
-```
-Peanotch/
-├── App.swift                  # 应用入口，创建刘海窗口和菜单栏图标
-├── NotchWindowController.swift # 管理 NSPanel 的位置、展开/收起动画
-└── NotchView.swift            # SwiftUI 视图：时钟 + 日期
-```
-
-## 路线图（ Ideas ）
+## 路线图（Ideas）
 
 - [ ] 正在播放（Now Playing）媒体信息
-- [ ] 电池状态
-- [ ] 天气信息
 - [ ] 文件暂存架（File Shelf）
+- [ ] 更多运动项目赛程（足球等）
 - [ ] 拖拽调整宽度
 
 ## 致谢

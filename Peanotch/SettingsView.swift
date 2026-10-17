@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsSection: Hashable {
-    case general, notch, countdown, about
+    case general, notch, sports, countdown, about
 }
 
 /// Two-column System Settings style: sidebar navigation on the left
@@ -38,6 +38,7 @@ struct SettingsView: View {
         [
             SidebarItem(tag: .general, title: L10n.t("通用", "General"), icon: "gearshape", color: Color(white: 0.45)),
             SidebarItem(tag: .notch, title: L10n.t("刘海", "Notch"), icon: "macwindow.on.rectangle", color: Color(red: 0.20, green: 0.47, blue: 1.00)),
+            SidebarItem(tag: .sports, title: L10n.t("比赛日程", "Sports"), icon: "sportscourt.fill", color: Color(red: 0.30, green: 0.69, blue: 0.35)),
             SidebarItem(tag: .countdown, title: L10n.t("倒计时", "Countdowns"), icon: "calendar.badge.clock", color: Color(red: 1.00, green: 0.42, blue: 0.24)),
             SidebarItem(tag: .about, title: L10n.t("关于", "About"), icon: "info.circle", color: Color(red: 0.35, green: 0.60, blue: 0.95)),
         ]
@@ -92,6 +93,7 @@ struct SettingsView: View {
                 switch section {
                 case .general: generalPane
                 case .notch: notchPane
+                case .sports: sportsPane
                 case .countdown: countdownPane
                 case .about: aboutPane
                 }
@@ -162,6 +164,87 @@ struct SettingsView: View {
             footnote(L10n.t("靠近展开：鼠标移入刘海区域自动弹出，移开 0.25 秒后收起。",
                             "Hover: the dashboard opens when the pointer reaches the notch and closes 0.25s after leaving."))
         }
+    }
+
+    // MARK: - Sports pane
+
+    private var sportsPane: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            paneTitle(L10n.t("比赛日程", "Sports"))
+            settingsGroup {
+                settingsRow(L10n.t("显示赛程卡片", "Show schedule card")) {
+                    Toggle("", isOn: $settings.showSportsCard)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
+            }
+            settingsGroup {
+                settingsRow(L10n.t("运动项目", "Sport")) {
+                    HStack(spacing: 8) {
+                        sportChip(L10n.t("篮球 · NBA", "Basketball · NBA"), selected: true)
+                        sportChip(L10n.t("足球", "Soccer"), selected: false, disabled: true)
+                    }
+                }
+                rowDivider
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(L10n.t("主队（可多选，比赛进行时高频刷新）", "Favorite teams (select any; live games refresh faster)"))
+                        .font(.system(size: 13))
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 6)], spacing: 6) {
+                        ForEach(SportsService.nbaTeamsEast + SportsService.nbaTeamsWest, id: \.self) { team in
+                            teamChip(team)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            footnote(L10n.t("赛程数据来自虎扑。每天更新一次；主队比赛进行中时每 2 分钟刷新比分。更多运动项目后续支持。",
+                            "Schedule data from Hupu. Refreshed daily; scores refresh every 2 minutes while a favorite team is playing. More sports coming later."))
+        }
+    }
+
+    private func sportChip(_ text: String, selected: Bool, disabled: Bool = false) -> some View {
+        HStack(spacing: 4) {
+            if selected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            Text(text)
+                .font(.system(size: 12))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(selected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.08)))
+        .foregroundStyle(disabled ? Color.secondary : Color.primary)
+        .opacity(disabled ? 0.55 : 1)
+    }
+
+    private func teamChip(_ team: String) -> some View {
+        let selected = settings.favoriteTeams.contains(team)
+        return Button {
+            if selected {
+                settings.favoriteTeams.removeAll { $0 == team }
+            } else {
+                settings.favoriteTeams.append(team)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if selected {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(Color(red: 0.96, green: 0.78, blue: 0.29))
+                }
+                Text(team)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(selected ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.07)))
+            .foregroundStyle(Color.primary)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var countdownPane: some View {
