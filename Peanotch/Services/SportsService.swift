@@ -33,6 +33,8 @@ final class SportsService: ObservableObject {
         let homeScore: Int?
         let awayScore: Int?
         let status: GameStatus
+        /// Live CS2 only: current map + round score, e.g. "Anubis 6-2".
+        var liveDetail: String? = nil
     }
 
     /// Chinese team names exactly as they appear in the Hupu data (the
@@ -263,6 +265,7 @@ final class SportsService: ObservableObject {
 
         var s1 = cs2Score(match["t1_score"])
         var s2 = cs2Score(match["t2_score"])
+        var liveDetail: String?
         var status: GameStatus = (s1 != nil || !(match["end_time"] as? String ?? "").isEmpty) ? .finished : .scheduled
         if let state = match["state"] as? [String: Any] {
             // 5E sends live_status as a STRING ("1"); be liberal about it.
@@ -271,6 +274,14 @@ final class SportsService: ObservableObject {
             if isLive { status = .live }
             s1 = s1 ?? cs2Score(state["t1_score"])
             s2 = s2 ?? cs2Score(state["t2_score"])
+            // 小分: the in-progress map's round score (bout status "1").
+            if isLive,
+               let bouts = state["bout_states"] as? [[String: Any]],
+               let current = bouts.first(where: { ($0["status"] as? String) == "1" }),
+               let r1 = cs2Score(current["t1_score"]), let r2 = cs2Score(current["t2_score"]) {
+                let mapName = (current["map_name"] as? String) ?? ""
+                liveDetail = mapName.isEmpty ? "\(r1)-\(r2)" : "\(mapName) \(r1)-\(r2)"
+            }
         }
 
         return Game(id: id,
@@ -280,7 +291,8 @@ final class SportsService: ObservableObject {
                     awayTeam: t1,
                     homeScore: s2,
                     awayScore: s1,
-                    status: status)
+                    status: status,
+                    liveDetail: liveDetail)
     }
 
     private func fetchCS2(completion: @escaping ([Game]?) -> Void) {

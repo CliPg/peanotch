@@ -1136,6 +1136,16 @@ struct NotchView: View {
                 .foregroundStyle(item.game.map(isFavoriteGame) == true
                                  ? Color(red: 0.96, green: 0.78, blue: 0.29) : Color.white)
                 .lineLimit(1)
+            if let detail = item.game?.liveDetail, item.game?.status == .live {
+                // 小分 (current map round score); the compact dashboard card
+                // only has room for the numbers.
+                Text(compact ? String(detail.split(separator: " ").last ?? "") : detail)
+                    .font(.system(size: compact ? 9 : 10, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .fixedSize(horizontal: true, vertical: false)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 0)
         }
         .frame(height: compact ? 22 : 26)
