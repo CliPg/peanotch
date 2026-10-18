@@ -122,16 +122,42 @@ final class SportsService: ObservableObject {
             // nil = request/parse failed (keep whatever we had); [] = genuinely
             // no games. Only overwrite when at least one source answered.
             if nbaGames != nil || cs2Games != nil {
-                var all = (nbaGames ?? []) + (cs2Games ?? [])
-                all.sort { $0.startTime < $1.startTime }
-                self.games = all
+                var fresh = (nbaGames ?? []) + (cs2Games ?? [])
+                self.games = self.merging(fresh)
                 self.lastUpdated = Date()
-                Diagnostics.record("sports: fetched nba=\(nbaGames?.count ?? -1) cs2=\(cs2Games?.count ?? -1)")
+                Diagnostics.record("sports: fetched nba=\(nbaGames?.count ?? -1) cs2=\(cs2Games?.count ?? -1) merged=\(self.games.count)")
             } else {
                 Diagnostics.record("sports: all sources failed, keeping \(self.games.count) stale games")
             }
             self.scheduleNextFetch()
         }
+    }
+
+    /// Sticky merge: 5E drops a match from `preview` the moment it starts and
+    /// `result` only picks it up after it ends — during that handover the
+    /// match would vanish from the calendar. Keep previously seen games for
+    /// the fetch window; fresh data overwrites, unseen live games are demoted
+    /// to finished (they ended while we weren't looking), and games older
+    /// than the window age out naturally.
+    private func merging(_ fresh: [Game]) -> [Game] {
+        let windowStart = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-2 * 86400)
+        var byId: [String: Game] = [:]
+        for old in games where old.startTime >= windowStart {
+            byId[old.id] = old
+        }
+        var freshIds = Set<String>()
+        for game in fresh {
+            freshIds.insert(game.id)
+            byId[game.id] = game
+        }
+        let demoted = byId.values.map { game -> Game in
+            guard !freshIds.contains(game.id), game.status == .live else { return game }
+            return Game(id: game.id, sport: game.sport, startTime: game.startTime,
+                        homeTeam: game.homeTeam, awayTeam: game.awayTeam,
+                        homeScore: game.homeScore, awayScore: game.awayScore,
+                        status: .finished)
+        }
+        return demoted.sorted { $0.startTime < $1.startTime }
     }
 
     private func requestJSON(_ url: URL, completion: @escaping ([String: Any]?) -> Void) {
@@ -282,6 +308,9 @@ final class SportsService: ObservableObject {
                 let mapName = (current["map_name"] as? String) ?? ""
                 liveDetail = mapName.isEmpty ? "\(r1)-\(r2)" : "\(mapName) \(r1)-\(r2)"
             }
+            // hot_match keeps entries a while after the final map with
+            // live_status cleared — scores present means it already ended.
+            if !isLive, status == .scheduled, s1 != nil { status = .finished }
         }
 
         return Game(id: id,
