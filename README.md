@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Assets/promo.png" alt="Peanotch" width="880">
+<img src="Assets/promo.gif" alt="Peanotch" width="880">
 
 # 🥜 Peanotch
 
