@@ -39,8 +39,10 @@ final class ReminderService: ObservableObject {
             completion([:])
             return
         }
-        let predicate = store.predicateForIncompleteReminders(withDueDateStarting: monthStart,
-                                                               ending: end,
+        // Same inclusive/exclusive bounds as load(_:): date-only reminders sit
+        // exactly on the month's midnight edges.
+        let predicate = store.predicateForIncompleteReminders(withDueDateStarting: monthStart.addingTimeInterval(-1),
+                                                               ending: end.addingTimeInterval(-1),
                                                                calendars: nil)
         store.fetchReminders(matching: predicate) { reminders in
             var counts: [Int: Int] = [:]
@@ -62,11 +64,13 @@ final class ReminderService: ObservableObject {
         let day = Calendar.current.startOfDay(for: date)
         currentDay = day
         let calendar = Calendar.current
-        let end = calendar.date(byAdding: .day, value: 1, to: day)!
         // For today, a nil start also picks up overdue incomplete reminders.
-        // The predicate's start bound is EXCLUSIVE and date-only reminders are
-        // due exactly at midnight — start one second earlier so they match.
+        // The predicate's start bound is EXCLUSIVE and its end bound is
+        // INCLUSIVE, while date-only reminders are due exactly at midnight —
+        // nudge both bounds one second inside the day so a reminder set for
+        // the 25th doesn't also surface on the 24th.
         let start: Date? = calendar.isDateInToday(day) ? nil : day.addingTimeInterval(-1)
+        let end = calendar.date(byAdding: .day, value: 1, to: day)!.addingTimeInterval(-1)
         let predicate = store.predicateForIncompleteReminders(withDueDateStarting: start,
                                                                ending: end,
                                                                calendars: nil)
